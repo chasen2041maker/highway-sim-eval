@@ -1,0 +1,5 @@
+# Python 3.10 及以上。直接依赖固定版本，clone 后 pip install -r requirements.txt 即可复现。
+highway-env==1.12.1
+gymnasium==1.3.0
+numpy==2.2.6
+pygame-ce==2.5.8
