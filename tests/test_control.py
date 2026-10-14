@@ -2,6 +2,7 @@ import math
 
 from ads.control import PID
 from ads.vehicle import VehicleState, step
+from ads.control import to_pedals
 
 def test_p_only():
     """只有 P：差 10，kp 0.5 → 加速度 5。"""
@@ -42,3 +43,15 @@ def test_p_only_uphill_stalls_at_9():
 def test_pi_uphill_reaches_10():
     """加上 I：最后能到 10。"""
     assert math.isclose(drive_uphill(PID(kp=1.0, ki=0.2), 60.0), 10.0, abs_tol=0.01)
+
+def test_to_pedals_throttle():
+    """u = 0.3：轻踩油门。"""
+    assert to_pedals(0.3) == (0.3, 0.0)
+
+def test_to_pedals_clamp():
+    """u = 2.5：油门最多踩到底。"""
+    assert to_pedals(2.5) == (1.0, 0.0)
+
+def test_to_pedals_brake():
+    """u = -0.4：踩刹车。"""
+    assert to_pedals(-0.4) == (0.0, 0.4)

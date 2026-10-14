@@ -20,3 +20,10 @@ class PID:
             derivative = (error - self.pre_error) / dt_s
         self.pre_error = error
         return self.kp * error + self.ki * self.integral + self.kd * derivative
+
+def to_pedals(u: float) -> tuple[float, float]:
+    """PID 的输出 → CARLA 的 (油门, 刹车)，都在 0 到 1 之间。
+u >= 0 踩油门，u < 0 踩刹车；超过 1 的部分踩不下去，截到 1。"""
+    if u >= 0:
+        return min(u, 1.0),0.0
+    return 0.0, min(-u, 1.0)
