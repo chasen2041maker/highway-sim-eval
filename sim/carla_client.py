@@ -52,3 +52,12 @@ class CarlaSim:
         frame = self.world.tick()
         sim_time_s = self.world.get_snapshot().timestamp.elapsed_seconds
         return frame, sim_time_s
+
+    def follow(self, actor, back_m: float = 8.0, up_m: float = 4.0) -> None:
+        """把窗口的旁观镜头放到 actor 后方 back_m 米、高 up_m 米处，朝车头方向看。
+        每帧调用一次，就是跟车视角。只影响画面，不影响仿真结果。"""
+        tf = actor.get_transform()
+        cam_loc = tf.transform(carla.Location(x=-back_m, z=up_m))
+        self.world.get_spectator().set_transform(
+            carla.Transform(cam_loc, carla.Rotation(pitch=-15, yaw=tf.rotation.yaw))
+        )

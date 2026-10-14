@@ -55,3 +55,15 @@ def test_to_pedals_clamp():
 def test_to_pedals_brake():
     """u = -0.4：踩刹车。"""
     assert to_pedals(-0.4) == (0.0, 0.4)
+
+def test_no_windup_when_saturated():
+    """差距 8，u 远超上限 1，而且还想要更多：这帧不攒。"""
+    pid = PID(kp=1.0, ki=0.2, u_max=1.0)
+    pid.update(8.0, 0.05)
+    assert pid.integral == 0.0
+
+def test_integral_adds_when_not_saturated():
+    """差距 0.5，u 约 0.51，没到上限：照常攒 0.5 × 0.1 = 0.05。"""
+    pid = PID(kp=1.0, ki=0.2, u_max=1.0)
+    pid.update(0.5, 0.1)
+    assert math.isclose(pid.integral, 0.05)
