@@ -28,7 +28,23 @@ def simulate():
     ego = VehicleState(x_m=0.0, speed_mps=START_SPEED_MPS)
     lead_x_m, lead_speed_mps = START_GAP_M, START_SPEED_MPS     # 前车车尾的位置、前车车速
     ts, gaps, ego_speeds, lead_speeds, accels = [], [], [], [], []
-    # >>> 你手敲的循环放在这里（替换掉这一行）
+
+    for k in range(round(SIM_TIME_S / DT_S)):
+        t_s = k * DT_S
+        gap_m = lead_x_m - ego.x_m                  # ① 量车距
+        accel = max(-MAX_BRAKE_MPS2, idm_accel(ego.speed_mps, lead_speed_mps, gap_m, TARGET_SPEED_MPS))   # ② IDM 算加速度（最猛刹 -8）   
+        ts.append(t_s); gaps.append(gap_m); ego_speeds.append(ego.speed_mps)
+        lead_speeds.append(lead_speed_mps); accels.append(accel)
+        ego = step(ego, accel_mps2=accel, steer_rad=0.0, dt_s=DT_S)   # ③ 我往前开一步
+        lead_accel = LEAD_BRAKE_MPS2 if t_s >= BRAKE_AT_S else 0.0   # ④ 前车：第 5 秒起刹车
+        lead_speed_mps = max(0.0, lead_speed_mps + lead_accel * DT_S)
+        lead_x_m += lead_speed_mps * DT_S
+
+
+
+
+
+    
     return ts, gaps, ego_speeds, lead_speeds, accels
 
 
