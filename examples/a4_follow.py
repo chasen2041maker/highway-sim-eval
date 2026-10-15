@@ -32,7 +32,7 @@ def simulate():
     for k in range(round(SIM_TIME_S / DT_S)):
         t_s = k * DT_S
         gap_m = lead_x_m - ego.x_m                  # ① 量车距
-        accel = max(-MAX_BRAKE_MPS2, idm_accel(ego.speed_mps, lead_speed_mps, gap_m, TARGET_SPEED_MPS))   # ② IDM 算加速度（最猛刹 -8）   
+        accel = max(-MAX_BRAKE_MPS2, idm_accel(ego.speed_mps, lead_speed_mps, gap_m, TARGET_SPEED_MPS))   # ② IDM 算加速度（最猛刹 -8）
         ts.append(t_s); gaps.append(gap_m); ego_speeds.append(ego.speed_mps)
         lead_speeds.append(lead_speed_mps); accels.append(accel)
         ego = step(ego, accel_mps2=accel, steer_rad=0.0, dt_s=DT_S)   # ③ 我往前开一步
