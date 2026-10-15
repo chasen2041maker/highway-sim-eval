@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- A3 Pure Pursuit 动画讲解：双击用浏览器打开。数字和 examples/a3_pure_pursuit.py 算出来的一样。 -->
+<title>前视距离试驾场</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&family=Overpass+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one column. The road scene is the hero; controls sit right under it; the live caption and the two numbers sit side by side; the final results table closes the page. */
+:root {
+  --bg: #f1f2ee;
+  --fg: #1b1f1e;
+  --muted: #59605d;
+  --hair: #d3d7cf;
+  --panel: #ffffff;
+  --ground: #d3d8cf;
+  --road: #3a3e3d;
+  --stripe: #f6f6f1;
+  --measure: #ffd447;
+  --callout-bg: #141716;
+  --callout-fg: #ffffff;
+  --car-2: #2a78d6;
+  --car-5: #eb6834;
+  --car-15: #1baf7a;
+  --car-x: #e87ba4;
+  --focus: #2a78d6;
+  --font-ui: "Overpass", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-data: "Overpass Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111312; --fg: #e8ebe7; --muted: #9aa29e; --hair: #2b2f2d; --panel: #191c1b;
+    --ground: #0b0d0c; --road: #2a2d2c; --stripe: #f2f2ec; --measure: #ffd447;
+    --callout-bg: #0e100f; --callout-fg: #ffffff;
+    --car-2: #3987e5; --car-5: #d95926; --car-15: #199e70; --car-x: #d55181; --focus: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111312; --fg: #e8ebe7; --muted: #9aa29e; --hair: #2b2f2d; --panel: #191c1b;
+  --ground: #0b0d0c; --road: #2a2d2c; --stripe: #f2f2ec; --measure: #ffd447;
+  --callout-bg: #0e100f; --callout-fg: #ffffff;
+  --car-2: #3987e5; --car-5: #d95926; --car-15: #199e70; --car-x: #d55181; --focus: #3987e5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 18px; }
+
+header { display: grid; gap: 4px; }
+h1 { margin: 0; font-weight: 800; font-size: clamp(24px, 4.2vw, 34px); line-height: 1.2; letter-spacing: 0.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+
+.stage { position: relative; border-radius: 10px; overflow: hidden; background: var(--ground); }
+canvas { display: block; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; }
+@media (max-width: 600px) { canvas { aspect-ratio: 4 / 3; } }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.group-label { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; margin-right: 2px; }
+button, select {
+  font: inherit; font-size: 14px; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--hair); border-radius: 7px; padding: 5px 11px; cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.chip-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0.05em; }
+#playBtn { min-width: 76px; font-weight: 600; }
+input[type="range"] { accent-color: var(--fg); }
+#ld { width: 140px; }
+.ld-readout { font-family: var(--font-data); font-size: 13px; min-width: 7.5em; }
+
+.timeline { display: flex; gap: 12px; align-items: center; }
+#time { flex: 1; min-width: 0; }
+#timeLabel { font-family: var(--font-data); font-size: 13px; color: var(--muted); min-width: 8.5em; text-align: right; font-variant-numeric: tabular-nums; }
+
+.readout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 720px) { .readout { grid-template-columns: minmax(0, 1fr); } }
+.caption-box { background: var(--panel); border: 1px solid var(--hair); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.eyebrow { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; }
+#caption { margin: 0; font-size: 17px; line-height: 1.65; min-height: 3.3em; }
+
+.scores { display: grid; gap: 10px; align-content: start; }
+.stat {
+  display: grid; gap: 2px; text-align: left; width: 100%;
+  background: var(--panel); border: 1px solid var(--hair); border-radius: 10px; padding: 10px 14px;
+}
+.stat .label { font-size: 13px; color: var(--muted); }
+.stat .value { font-family: var(--font-data); font-weight: 600; font-size: 28px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.stat .value small { font-family: var(--font-ui); font-size: 14px; font-weight: 400; margin-left: 4px; }
+.stat .hint { font-size: 12px; color: var(--muted); }
+.now { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.now b { font-family: var(--font-data); color: var(--fg); font-weight: 600; }
+
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair); }
+th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+td.num { font-family: var(--font-data); font-weight: 600; }
+td button { font-family: var(--font-data); font-weight: 600; padding: 2px 8px; }
+.table-scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--hair); border-radius: 10px; }
+.table-scroll table tr:last-child td { border-bottom: 0; }
+
+section { display: grid; gap: 10px; }
+h2 { margin: 6px 0 0; font-size: 19px; font-weight: 800; text-wrap: balance; }
+.defs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 720px) { .defs { grid-template-columns: minmax(0, 1fr); } }
+.def { display: grid; gap: 4px; padding: 2px 0; }
+.def h3 { margin: 0; font-size: 16px; font-weight: 800; }
+.def p { margin: 0; color: var(--fg); }
+.def code, .note code { font-family: var(--font-data); font-size: 13px; background: var(--panel); border: 1px solid var(--hair); border-radius: 5px; padding: 0 5px; }
+.note { margin: 0; color: var(--muted); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>前视距离试驾场</h1>
+    <p class="lede">车从白线右边 3 米出发，车速 10 米/秒。每 0.1 秒，它盯住白线上前方 Ld 米的一个点（圆点），朝那个点打方向。看车是怎么开的，两个数字是怎么来的。</p>
+  </header>
+
+  <div class="stage">
+    <canvas id="scene" aria-label="俯视的道路动画：白线先直走 40 米再左转弯，车从白线右边 3 米出发沿白线开。"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="group" role="group" aria-label="看几辆车">
+      <span class="group-label">看</span>
+      <button id="modeSingle" aria-pressed="true">一辆车</button>
+      <button id="modeCompare" aria-pressed="false">三辆一起比</button>
+    </div>
+    <div class="group" id="ldGroup" role="group" aria-label="前视距离">
+      <span class="group-label">盯多远</span>
+      <button class="ld-preset" data-ld="2" aria-pressed="true"><span class="chip-dot" style="background: var(--car-2)"></span>2 米</button>
+      <button class="ld-preset" data-ld="5" aria-pressed="false"><span class="chip-dot" style="background: var(--car-5)"></span>5 米</button>
+      <button class="ld-preset" data-ld="15" aria-pressed="false"><span class="chip-dot" style="background: var(--car-15)"></span>15 米</button>
+      <input type="range" id="ld" min="1.5" max="20" step="0.5" value="2" aria-label="自己调前视距离">
+      <span class="ld-readout" id="ldReadout">Ld = 2.0 米</span>
+    </div>
+    <div class="group" role="group" aria-label="播放">
+      <button id="playBtn">暂停</button>
+      <button id="restartBtn">从头开</button>
+      <select id="speed" aria-label="播放速度">
+        <option value="0.25">0.25 倍速</option>
+        <option value="0.5" selected>0.5 倍速</option>
+        <option value="1">1 倍速</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="timeline">
+    <input type="range" id="time" min="0" max="1000" step="1" value="0" aria-label="拖动时间">
+    <span id="timeLabel">0.0 秒 · 第 0 步</span>
+  </div>
+
+  <div class="readout">
+    <div class="caption-box">
+      <span class="eyebrow">解说</span>
+      <p id="caption">车在白线右边 3 米。</p>
+    </div>
+    <div class="scores" id="scoresSingle">
+      <button class="stat" id="statOver">
+        <span class="label">直道上越过白线最远</span>
+        <span class="value"><span id="overVal">0.00</span><small>米</small></span>
+        <span class="hint">前 30 米里，车跑到白线左边最远多少。点一下跳到那一刻</span>
+      </button>
+      <button class="stat" id="statCurve">
+        <span class="label">拐弯时离白线最远</span>
+        <span class="value"><span id="curveVal">0.00</span><small>米</small></span>
+        <span class="hint">弯道那段，车离白线最远多少。点一下跳到那一刻</span>
+      </button>
+      <div class="now">现在：离白线 <b id="nowErr">3.00</b> 米 · 方向盘 <b id="nowSteer">0.0</b>°</div>
+    </div>
+    <div class="scores" id="scoresCompare" hidden>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>盯多远</th><th>直道上越过白线最远</th><th>拐弯时离白线最远</th></tr></thead>
+          <tbody id="liveRows"></tbody>
+        </table>
+      </div>
+      <p class="note">数字随车往前开而更新。点数字跳到那一刻，图上会标出来。</p>
+    </div>
+  </div>
+
+  <section>
+    <h2>三次的最终结果</h2>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>盯多远（Ld）</th><th>直道上越过白线最远</th><th>拐弯时离白线最远</th><th>毛病</th></tr></thead>
+        <tbody id="finalRows"></tbody>
+      </table>
+    </div>
+    <p class="note">和你在终端里跑 <code>python -m examples.a3_pure_pursuit</code> 打印的数字一样：这一页用同样的公式、同样的设定重算了一遍。</p>
+  </section>
+
+  <section>
+    <h2>两个数字怎么读</h2>
+    <div class="defs">
+      <div class="def">
+        <h3>直道上越过白线最远</h3>
+        <p>只看前 30 米直道。车在白线右边时还没碰到线；跑到白线左边，就是冲过头了。取跑到左边最远的那一下。一次都没冲过就是 0。代码里叫 <code>overshoot_m</code>。</p>
+      </div>
+      <div class="def">
+        <h3>拐弯时离白线最远</h3>
+        <p>只看弯道那段（40 米之后、还没拐完）。每一刻量一下车离白线多远，取最远的那一下。代码里叫 <code>curve_err_m</code>。</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+// ===== SIM CORE START (same math as ads/vehicle.py + ads/control.py + examples/a3_pure_pursuit.py) =====
+const WHEELBASE_M = 2.8;
+const MAX_STEER_RAD = 35 * Math.PI / 180;
+const DT_S = 0.1, SIM_TIME_S = 10, SPEED_MPS = 10, START_Y_M = -3;
+const N_STEPS = Math.round(SIM_TIME_S / DT_S);
+
+function makePath(spacing) {
+  const path = [];
+  for (let i = 0; i < Math.round(40 / spacing); i++) path.push([i * spacing, 0]);
+  const n = Math.round(20 * Math.PI / 2 / spacing);
+  for (let k = 0; k <= n; k++) {
+    const th = k / n * Math.PI / 2;
+    path.push([40 + 20 * Math.sin(th), 20 - 20 * Math.cos(th)]);
+  }
+  for (let i = 1; i < Math.round(40 / spacing); i++) path.push([60, 20 + i * spacing]);
+  return path;
+}
+const PATH = makePath(0.1);
+
+function stepCar(s, steer) {
+  steer = Math.max(-MAX_STEER_RAD, Math.min(MAX_STEER_RAD, steer));
+  return {
+    x: s.x + s.v * Math.cos(s.h) * DT_S,
+    y: s.y + s.v * Math.sin(s.h) * DT_S,
+    h: s.h + s.v / WHEELBASE_M * Math.tan(steer) * DT_S,
+    v: s.v,
+  };
+}
+function ppSteer(s, tx, ty) {
+  const dx = tx - s.x, dy = ty - s.y;
+  const ld = Math.hypot(dx, dy);
+  const alpha = Math.atan2(dy, dx) - s.h;
+  return Math.atan(2 * WHEELBASE_M * Math.sin(alpha) / ld);
+}
+function nearest(x, y) {
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < PATH.length; i++) {
+    const d = Math.hypot(PATH[i][0] - x, PATH[i][1] - y);
+    if (d < bd) { bd = d; bi = i; }
+  }
+  return [bi, bd];
+}
+function findLookahead(s, ld) {
+  const [ni] = nearest(s.x, s.y);
+  for (let i = ni; i < PATH.length; i++) {
+    const p = PATH[i];
+    if (Math.hypot(p[0] - s.x, p[1] - s.y) >= ld) return p;
+  }
+  return PATH[PATH.length - 1];
+}
+function simulate(ld) {
+  let s = { x: 0, y: START_Y_M, h: 0, v: SPEED_MPS };
+  const n0 = nearest(s.x, s.y);
+  const S = [{ ...s, near: n0[0], err: n0[1] }];
+  const targets = [], steers = [];
+  for (let k = 0; k < N_STEPS; k++) {
+    const t = findLookahead(s, ld);
+    const d = ppSteer(s, t[0], t[1]);
+    targets.push(t); steers.push(d);
+    s = stepCar(s, d);
+    const nn = nearest(s.x, s.y);
+    S.push({ ...s, near: nn[0], err: nn[1] });
+  }
+  const overRun = [], overIdx = [], curveRun = [], curveIdx = [];
+  let ob = 0, oi = -1, cb = 0, ci = -1, crossIdx = -1, earlyIdx = -1;
+  for (let k = 0; k <= N_STEPS; k++) {
+    const p = S[k];
+    if (p.x < 30 && p.y > ob) { ob = p.y; oi = k; }
+    if (p.x > 40 && p.y < 20 && p.err > cb) { cb = p.err; ci = k; }
+    if (crossIdx < 0 && p.x < 30 && p.y > 0) crossIdx = k;
+    if (earlyIdx < 0 && p.x >= 30 && p.x <= 40 && p.y > 0.1) earlyIdx = k;
+    overRun.push(ob); overIdx.push(oi); curveRun.push(cb); curveIdx.push(ci);
+  }
+  return { ld, S, targets, steers, overRun, overIdx, curveRun, curveIdx, crossIdx, earlyIdx,
+           over: overRun[N_STEPS], curve: curveRun[N_STEPS] };
+}
+// ===== SIM CORE END =====
+
+const PRESETS = [2, 5, 15];
+const cache = new Map();
+function sim(ld) {
+  const key = ld.toFixed(1);
+  if (!cache.has(key)) cache.set(key, simulate(ld));
+  return cache.get(key);
+}
+function colorVar(ld) {
+  return ld === 2 ? "--car-2" : ld === 5 ? "--car-5" : ld === 15 ? "--car-15" : "--car-x";
+}
+
+// ---------- state ----------
+const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const state = {
+  mode: "single",
+  ld: 2,
+  t: 0,
+  playing: !reduceMotion,
+  speed: 0.5,
+  focus: null,          // {ld, kind: "over" | "curve"} in compare mode
+  cam: null,
+};
+
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+const lerp = (a, b, f) => a + (b - a) * f;
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function stepIndex(t) { return Math.min(N_STEPS, Math.floor(t / DT_S + 1e-9)); }
+function pose(sm, t) {
+  const f = t / DT_S;
+  const k = Math.min(Math.floor(f), N_STEPS - 1);
+  const a = Math.min(1, f - k);
+  const p = sm.S[k], q = sm.S[k + 1];
+  const steer = Math.max(-MAX_STEER_RAD, Math.min(MAX_STEER_RAD, sm.steers[k]));
+  return { x: lerp(p.x, q.x, a), y: lerp(p.y, q.y, a), h: lerp(p.h, q.h, a), err: lerp(p.err, q.err, a),
+           steer, rawSteer: sm.steers[k], target: sm.targets[k], k };
+}
+function activeSims() {
+  return state.mode === "single" ? [sim(state.ld)] : PRESETS.map(sim);
+}
+function fmtLd(ld) { return Number.isInteger(ld) ? String(ld) : ld.toFixed(1); }
+
+// ---------- captions ----------
+function captionSingle(sm, t) {
+  const kk = stepIndex(t);
+  const p = pose(sm, t);
+  const ld = fmtLd(sm.ld);
+  if (t >= SIM_TIME_S - 1e-9) {
+    return `开完了。盯前方 ${ld} 米：直道上越过白线最远 ${sm.over.toFixed(2)} 米，拐弯时离白线最远 ${sm.curve.toFixed(2)} 米。点右边的数字，可以跳回那一刻。`;
+  }
+  if (p.x < 30) {
+    if (kk < 3) return `车在白线右边 3 米。圆点是它盯着的点：在白线上，离车 ${ld} 米（虚线圈的半径）。车朝圆点打方向。`;
+    if (sm.crossIdx < 0 || kk < sm.crossIdx) {
+      if (p.x > 8 && p.y < -0.5) return `靠得很慢：已经开到 ${p.x.toFixed(0)} 米处，还在白线右边 ${(-p.y).toFixed(2)} 米。盯得远，方向打得轻。`;
+      const deg = Math.abs(p.steer * 180 / Math.PI).toFixed(1);
+      const maxed = Math.abs(p.rawSteer) >= MAX_STEER_RAD ? "，已经打到头了（最多 35°）" : "";
+      return `往白线靠。方向盘往左打了 ${deg}°${maxed}。盯的点越近，打得越猛。`;
+    }
+    const peakK = sm.overIdx[N_STEPS];
+    if (kk < peakK) return `越过白线了！车头还斜着，来不及回正，继续往左冲。现在在白线左边 ${Math.max(0, p.y).toFixed(2)} 米。`;
+    const tail = sm.over > 0.5 ? "之后往回拐，又偏回右边一点，来回晃几下才贴住白线，这叫画龙。" : "之后很快贴住了白线。";
+    return `最远冲到白线左边 ${sm.over.toFixed(2)} 米（黄色标尺），这就是「直道上越过白线最远」。${tail}`;
+  }
+  if (p.x < 40) {
+    if (sm.earlyIdx >= 0 && kk >= sm.earlyIdx) return `还没进弯，盯的点已经落在弯道上了，车提前往左拐。这就是抄近路的开始。`;
+    return `直道快走完了，40 米处开始左转弯。30 米以后的直道不算进第一个数字。`;
+  }
+  if (p.y < 20) {
+    const r = Math.hypot(p.x - 40, p.y - 20);
+    const side = r < 20 ? "弯的内侧（抄近路）" : "弯的外侧";
+    return `拐弯中。现在离白线 ${p.err.toFixed(2)} 米，偏在${side}。到目前为止最远 ${sm.curveRun[kk].toFixed(2)} 米。`;
+  }
+  return `弯道走完了。拐弯时离白线最远 ${sm.curve.toFixed(2)} 米（黄色标尺），这就是「拐弯时离白线最远」。`;
+}
+function captionCompare(sims, t) {
+  const kk = stepIndex(t);
+  const lead = pose(sims[1], t);
+  if (t >= SIM_TIME_S - 1e-9) return "三辆都开完了。看得近（蓝），直道上冲过头；看得远（绿），拐弯抄近路；看 5 米（橙），两个数字都小。点表里的数字跳回那一刻。";
+  if (lead.x < 3) return "三辆车同时从白线右边 3 米出发，车速一样，只有盯多远不一样：蓝 2 米、橙 5 米、绿 15 米。";
+  if (lead.x < 30) {
+    if (sims[0].crossIdx >= 0 && kk >= sims[0].crossIdx) return "直道：蓝车（盯 2 米）冲过了白线又拐回来，来回晃；绿车（盯 15 米）靠得很慢，还在白线右边。";
+    return "三辆都在往白线靠。蓝车盯得最近，方向打得最猛。";
+  }
+  if (lead.x < 40) return "快进弯了：绿车盯的点已经落在弯道上，提前往左拐。";
+  if (lead.y < 20) return "弯道：绿车偏到了弯的内侧，抄了近路；蓝车、橙车几乎贴着白线。";
+  return "弯道走完了。看右边的表，对比三辆车的两个数字。";
+}
+
+// ---------- canvas ----------
+const canvas = $("scene");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.clientWidth; H = canvas.clientHeight;
+  if (W > 0 && H < 10) {               // some viewers ignore aspect-ratio on canvas: size it by hand
+    canvas.style.height = `${Math.round(W * (W < 600 ? 3 / 4 : 9 / 16))}px`;
+    H = canvas.clientHeight;
+  }
+  canvas.width = Math.max(1, Math.round(W * DPR)); canvas.height = Math.max(1, Math.round(H * DPR));
+  state.cam = null;
+  draw();                              // draw a still frame right away, even if animation frames are paused
+}
+window.addEventListener("resize", resize);
+new ResizeObserver(resize).observe(canvas);
+resize();
+
+function viewWidth() {
+  if (state.mode === "compare") return W < 520 ? 22 : 34;
+  return W < 520 ? 16 : 24;
+}
+
+function draw() {
+  if (!W || !H) return;
+  const C = {
+    ground: css("--ground"), road: css("--road"), stripe: css("--stripe"), measure: css("--measure"),
+    cbg: css("--callout-bg"), cfg: css("--callout-fg"),
+  };
+  const sims = activeSims();
+  const poses = sims.map((s) => pose(s, state.t));
+
+  // camera: follow the car (or the middle of the three), looking a bit ahead
+  let cx = 0, cy = 0, ch = 0;
+  poses.forEach((p) => { cx += p.x; cy += p.y; ch += p.h; });
+  cx /= poses.length; cy /= poses.length; ch /= poses.length;
+  const vw = viewWidth();
+  const target = { x: cx + Math.cos(ch) * vw * 0.18, y: cy + Math.sin(ch) * vw * 0.18 };
+  if (!state.cam) state.cam = { ...target };
+  state.cam.x = lerp(state.cam.x, target.x, 0.12);
+  state.cam.y = lerp(state.cam.y, target.y, 0.12);
+  const sc = W / vw;
+  const X = (x) => W / 2 + (x - state.cam.x) * sc;
+  const Y = (y) => H / 2 - (y - state.cam.y) * sc;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = C.ground; ctx.fillRect(0, 0, W, H);
+
+  // road surface
+  ctx.lineCap = "butt"; ctx.lineJoin = "round";
+  ctx.strokeStyle = C.road; ctx.lineWidth = 9 * sc;
+  ctx.beginPath(); ctx.moveTo(X(-40), Y(0));
+  for (let i = 0; i < PATH.length; i += 4) ctx.lineTo(X(PATH[i][0]), Y(PATH[i][1]));
+  ctx.lineTo(X(60), Y(80));
+  ctx.stroke();
+
+  // distance marks across the road
+  const font = (w, px) => `${w} ${px}px ${css("--font-ui")}`;
+  function crossBar(x, label, strong) {
+    ctx.save();
+    ctx.strokeStyle = C.stripe; ctx.globalAlpha = strong ? 0.55 : 0.28; ctx.lineWidth = 1.5;
+    ctx.setLineDash(strong ? [6, 5] : [2, 6]);
+    ctx.beginPath(); ctx.moveTo(X(x), Y(-4.5)); ctx.lineTo(X(x), Y(4.5)); ctx.stroke();
+    ctx.restore();
+    if (label) {
+      ctx.fillStyle = C.stripe; ctx.globalAlpha = strong ? 0.9 : 0.6;
+      ctx.font = font(600, 12); ctx.textAlign = "center"; ctx.textBaseline = "top";
+      ctx.fillText(label, X(x), Y(-4.5) + 4);
+      ctx.globalAlpha = 1;
+    }
+  }
+  [10, 20].forEach((x) => crossBar(x, `${x} 米`, false));
+  crossBar(0, "起点", true);
+  crossBar(30, "30 米：第一个数字只算到这里", true);
+  crossBar(40, "40 米：弯道开始", true);
+
+  // the white line (the path)
+  ctx.strokeStyle = C.stripe; ctx.lineWidth = Math.max(2, 0.15 * sc); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(X(PATH[0][0]), Y(PATH[0][1]));
+  for (let i = 1; i < PATH.length; i += 2) ctx.lineTo(X(PATH[i][0]), Y(PATH[i][1]));
+  ctx.stroke();
+
+  // trails
+  sims.forEach((sm, i) => {
+    const col = css(colorVar(sm.ld));
+    const kk = stepIndex(state.t);
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(2.5, 0.22 * sc); ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(X(sm.S[0].x), Y(sm.S[0].y));
+    for (let k = 1; k <= kk; k++) ctx.lineTo(X(sm.S[k].x), Y(sm.S[k].y));
+    ctx.lineTo(X(poses[i].x), Y(poses[i].y));
+    ctx.stroke();
+  });
+
+  // measurement rulers
+  function chip(text, sx, sy, alignRight) {
+    ctx.font = font(600, 13);
+    const tw = ctx.measureText(text).width;
+    const pw = tw + 14, ph = 24;
+    let x0 = alignRight ? sx - pw - 10 : sx + 10;
+    let y0 = sy - ph - 8;
+    x0 = Math.max(6, Math.min(W - pw - 6, x0));
+    y0 = Math.max(6, Math.min(H - ph - 6, y0));
+    ctx.fillStyle = C.cbg; ctx.globalAlpha = 0.92;
+    roundRect(x0, y0, pw, ph, 6); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.measure; ctx.lineWidth = 1.5; roundRect(x0, y0, pw, ph, 6); ctx.stroke();
+    ctx.fillStyle = C.cfg; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(text, x0 + 7, y0 + ph / 2 + 1);
+  }
+  function ruler(ax, ay, bx, by, text, alignRight) {
+    const sax = X(ax), say = Y(ay), sbx = X(bx), sby = Y(by);
+    ctx.strokeStyle = C.measure; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(sax, say); ctx.lineTo(sbx, sby); ctx.stroke();
+    // end ticks perpendicular to the ruler
+    const dx = sbx - sax, dy = sby - say, len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len * 7, ny = dx / len * 7;
+    [[sax, say], [sbx, sby]].forEach(([px, py]) => {
+      ctx.beginPath(); ctx.moveTo(px - nx, py - ny); ctx.lineTo(px + nx, py + ny); ctx.stroke();
+    });
+    ctx.fillStyle = C.measure;
+    ctx.beginPath(); ctx.arc(sbx, sby, 4, 0, Math.PI * 2); ctx.fill();
+    chip(text, Math.min(sax, sbx), Math.min(say, sby), alignRight);
+  }
+  // look-ahead circle and cars first, so the sight line, target and rulers stay on top
+  sims.forEach((sm, i) => {
+    const p = poses[i];
+    if (state.mode === "single") {
+      ctx.save();
+      ctx.strokeStyle = C.stripe; ctx.globalAlpha = 0.35; ctx.lineWidth = 1.2; ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), sm.ld * sc, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    drawCar(p, css(colorVar(sm.ld)), X, Y, sc, C);
+  });
+
+  sims.forEach((sm, i) => {
+    const p = poses[i];
+    const col = css(colorVar(sm.ld));
+    ctx.save();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(X(p.x), Y(p.y)); ctx.lineTo(X(p.target[0]), Y(p.target[1])); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = col; ctx.strokeStyle = C.cfg; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(X(p.target[0]), Y(p.target[1]), Math.max(5, 0.3 * sc), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (state.mode === "single") {
+      ctx.font = font(600, 12); ctx.fillStyle = C.cfg; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+      ctx.fillText("盯着的点", X(p.target[0]) + 9, Y(p.target[1]) - 6);
+    }
+  });
+
+  const kkNow = stepIndex(state.t);
+  sims.forEach((sm) => {
+    const showOver = state.mode === "single" || (state.focus && state.focus.ld === sm.ld && state.focus.kind === "over");
+    const showCurve = state.mode === "single" || (state.focus && state.focus.ld === sm.ld && state.focus.kind === "curve");
+    const oi = sm.overIdx[kkNow];
+    if (showOver && oi >= 0) {
+      const p = sm.S[oi];
+      ruler(p.x, 0, p.x, p.y, `越过白线 ${p.y.toFixed(2)} 米`, true);
+    }
+    const ci = sm.curveIdx[kkNow];
+    if (showCurve && ci >= 0) {
+      const p = sm.S[ci], q = PATH[p.near];
+      ruler(q[0], q[1], p.x, p.y, `离白线 ${p.err.toFixed(2)} 米`, false);
+    }
+  });
+
+  drawMinimap(sims, poses, C, vw);
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+}
+
+function drawCar(p, col, X, Y, sc, C) {
+  ctx.save();
+  ctx.translate(X(p.x), Y(p.y));
+  ctx.rotate(-p.h);
+  ctx.scale(sc, -sc);  // local units: metres, x forward, y left
+  // wheels
+  ctx.fillStyle = "#0c0d0d";
+  const wheel = (wx, wy, ang) => {
+    ctx.save(); ctx.translate(wx, wy); ctx.rotate(ang);
+    ctx.fillRect(-0.36, -0.13, 0.72, 0.26); ctx.restore();
+  };
+  wheel(0, 0.82, 0); wheel(0, -0.82, 0);
+  wheel(WHEELBASE_M, 0.82, p.steer); wheel(WHEELBASE_M, -0.82, p.steer);
+  // body: rear overhang 0.9 m, front overhang 0.9 m, width 1.8 m
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  const x0 = -0.9, x1 = WHEELBASE_M + 0.9, hw = 0.9, r = 0.35;
+  ctx.moveTo(x0 + r, -hw); ctx.lineTo(x1 - r, -hw); ctx.quadraticCurveTo(x1, -hw, x1, -hw + r);
+  ctx.lineTo(x1, hw - r); ctx.quadraticCurveTo(x1, hw, x1 - r, hw);
+  ctx.lineTo(x0 + r, hw); ctx.quadraticCurveTo(x0, hw, x0, hw - r);
+  ctx.lineTo(x0, -hw + r); ctx.quadraticCurveTo(x0, -hw, x0 + r, -hw); ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = 1.2 / sc; ctx.strokeStyle = C.cbg; ctx.stroke();
+  // windscreen
+  ctx.fillStyle = "rgba(0,0,0,0.38)";
+  ctx.fillRect(1.75, -0.72, 0.55, 1.44);
+  // rear-axle point (the reference point the maths uses)
+  ctx.fillStyle = C.cfg;
+  ctx.beginPath(); ctx.arc(0, 0, 0.16, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawMinimap(sims, poses, C, vw) {
+  const box = Math.round(Math.min(150, W * 0.26));
+  const pad = 10;
+  const x0 = W - box - pad, y0 = pad;
+  const xmin = -4, xmax = 66, ymin = -6, ymax = 64;
+  const s = (box - 12) / Math.max(xmax - xmin, ymax - ymin);
+  const mx = (x) => x0 + 6 + (x - xmin) * s;
+  const my = (y) => y0 + box - 6 - (y - ymin) * s;
+  ctx.save();
+  ctx.fillStyle = C.cbg; ctx.globalAlpha = 0.82;
+  roundRect(x0, y0, box, box, 8); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = C.stripe; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(mx(PATH[0][0]), my(PATH[0][1]));
+  for (let i = 1; i < PATH.length; i += 10) ctx.lineTo(mx(PATH[i][0]), my(PATH[i][1]));
+  ctx.stroke();
+  // camera window
+  const vh = vw * H / W;
+  ctx.strokeStyle = C.measure; ctx.lineWidth = 1;
+  ctx.strokeRect(mx(state.cam.x - vw / 2), my(state.cam.y + vh / 2), vw * s, vh * s);
+  sims.forEach((sm, i) => {
+    ctx.fillStyle = css(colorVar(sm.ld));
+    ctx.beginPath(); ctx.arc(mx(poses[i].x), my(poses[i].y), 3.5, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.fillStyle = C.cfg; ctx.globalAlpha = 0.75; ctx.font = `600 11px ${css("--font-ui")}`;
+  ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillText("全程", x0 + 8, y0 + 6);
+  ctx.restore();
+}
+
+// ---------- DOM updates ----------
+function updateDom() {
+  const kk = stepIndex(state.t);
+  $("time").value = String(Math.round(state.t / SIM_TIME_S * 1000));
+  $("timeLabel").textContent = `${state.t.toFixed(1)} 秒 · 第 ${kk} 步`;
+  const ended = state.t >= SIM_TIME_S - 1e-9;
+  $("playBtn").textContent = state.playing ? "暂停" : ended ? "重播" : "播放";
+  if (state.mode === "single") {
+    const sm = sim(state.ld);
+    const p = pose(sm, state.t);
+    $("caption").textContent = captionSingle(sm, state.t);
+    $("overVal").textContent = sm.overRun[kk].toFixed(2);
+    $("curveVal").textContent = sm.curveRun[kk].toFixed(2);
+    $("nowErr").textContent = p.err.toFixed(2);
+    const deg = p.steer * 180 / Math.PI;
+    $("nowSteer").textContent = `${deg >= 0 ? "左 " : "右 "}${Math.abs(deg).toFixed(1)}`;
+  } else {
+    const sims = PRESETS.map(sim);
+    $("caption").textContent = captionCompare(sims, state.t);
+    sims.forEach((sm) => {
+      const o = document.querySelector(`[data-cell="over-${sm.ld}"]`);
+      const c = document.querySelector(`[data-cell="curve-${sm.ld}"]`);
+      if (o) o.textContent = `${sm.overRun[kk].toFixed(2)} 米`;
+      if (c) c.textContent = `${sm.curveRun[kk].toFixed(2)} 米`;
+    });
+  }
+}
+
+function buildTables() {
+  const live = $("liveRows"), fin = $("finalRows");
+  const flaw = { 2: "直道上冲过头（画龙）", 5: "两样都小", 15: "拐弯抄近路（切弯）" };
+  PRESETS.forEach((ld) => {
+    const sm = sim(ld);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><span class="chip-dot" style="background: var(${colorVar(ld)})"></span>${ld} 米</td>
+      <td><button data-cell="over-${ld}" data-ld="${ld}" data-kind="over">0.00 米</button></td>
+      <td><button data-cell="curve-${ld}" data-ld="${ld}" data-kind="curve">0.00 米</button></td>`;
+    live.appendChild(tr);
+    const tf = document.createElement("tr");
+    tf.innerHTML = `<td><span class="chip-dot" style="background: var(${colorVar(ld)})"></span>${ld} 米</td>
+      <td class="num">${sm.over.toFixed(2)} 米</td><td class="num">${sm.curve.toFixed(2)} 米</td><td>${flaw[ld]}</td>`;
+    fin.appendChild(tf);
+  });
+  live.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-kind]");
+    if (!b) return;
+    const ld = Number(b.dataset.ld), kind = b.dataset.kind;
+    const sm = sim(ld);
+    const idx = kind === "over" ? sm.overIdx[N_STEPS] : sm.curveIdx[N_STEPS];
+    state.focus = { ld, kind };
+    seek(idx >= 0 ? idx * DT_S : state.t);
+  });
+}
+
+// ---------- controls ----------
+function seek(t) {
+  state.t = Math.max(0, Math.min(SIM_TIME_S, t));
+  state.playing = false;
+  state.cam = null;
+  updateDom();
+}
+function setMode(mode) {
+  state.mode = mode;
+  $("modeSingle").setAttribute("aria-pressed", String(mode === "single"));
+  $("modeCompare").setAttribute("aria-pressed", String(mode === "compare"));
+  $("ldGroup").hidden = mode !== "single";
+  $("scoresSingle").hidden = mode !== "single";
+  $("scoresCompare").hidden = mode !== "compare";
+  state.focus = null;
+  restart();
+}
+function setLd(ld) {
+  state.ld = ld;
+  $("ld").value = String(ld);
+  $("ldReadout").textContent = `Ld = ${ld.toFixed(1)} 米`;
+  document.querySelectorAll(".ld-preset").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.ld) === ld)));
+  restart();
+}
+function restart() {
+  state.t = 0; state.cam = null; state.playing = !reduceMotion || state.playing;
+  updateDom();
+}
+
+$("modeSingle").addEventListener("click", () => setMode("single"));
+$("modeCompare").addEventListener("click", () => setMode("compare"));
+document.querySelectorAll(".ld-preset").forEach((b) => b.addEventListener("click", () => setLd(Number(b.dataset.ld))));
+$("ld").addEventListener("input", (e) => setLd(Number(e.target.value)));
+$("playBtn").addEventListener("click", () => {
+  if (state.t >= SIM_TIME_S - 1e-9) { state.t = 0; state.cam = null; }
+  state.playing = !state.playing;
+  updateDom();
+});
+$("restartBtn").addEventListener("click", () => { state.t = 0; state.cam = null; state.playing = true; updateDom(); });
+$("speed").addEventListener("change", (e) => { state.speed = Number(e.target.value); });
+$("time").addEventListener("input", (e) => {
+  state.t = Number(e.target.value) / 1000 * SIM_TIME_S;
+  state.playing = false;
+  updateDom();
+});
+$("statOver").addEventListener("click", () => {
+  const sm = sim(state.ld); const i = sm.overIdx[N_STEPS];
+  if (i >= 0) seek(i * DT_S);
+});
+$("statCurve").addEventListener("click", () => {
+  const sm = sim(state.ld); const i = sm.curveIdx[N_STEPS];
+  if (i >= 0) seek(i * DT_S);
+});
+
+// ---------- loop ----------
+let last = performance.now(), rafAlive = false, timer = null;
+function tick(now) {
+  if (!W || !H) resize();
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+  last = now;
+  if (state.playing) {
+    state.t += dt * state.speed;
+    if (state.t >= SIM_TIME_S) { state.t = SIM_TIME_S; state.playing = false; }
+    updateDom();
+  }
+  draw();
+}
+function frame(now) {
+  rafAlive = true;
+  if (timer) { clearInterval(timer); timer = null; }
+  tick(now);
+  requestAnimationFrame(frame);
+}
+
+buildTables();
+updateDom();
+resize();
+requestAnimationFrame(frame);
+// fallback: if the viewer never delivers animation frames, drive the loop with a timer
+setTimeout(() => { if (!rafAlive) timer = setInterval(() => tick(performance.now()), 33); }, 600);
+</script>
+</body>
+</html>

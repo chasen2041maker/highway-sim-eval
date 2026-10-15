@@ -33,7 +33,7 @@
 | `ads/vehicle.py` | 运动学自行车模型（后轴参考点，转角限幅） | ✅ 完成 |
 | `sim/transforms.py` | CARLA 左手系 ↔ 车辆右手系（位置、航向、单位） | ✅ 完成，CARLA 实车验证 |
 | `sim/carla_client.py` | `CarlaSim`：同步模式、固定步长、自车生成、异常安全的资源回收 | ✅ 完成 |
-| `ads/control.py` | PID 纵向控制 | 🚧 模型上已验证，接入 CARLA 中 |
+| `ads/control.py` | PID 纵向控制 + Pure Pursuit 横向控制 | 🚧 模型上已验证，接入 CARLA 中 |
 | `sim/recorder.py` | 相机 / 激光雷达 / GNSS / IMU 录制，带帧号与仿真时间戳 | 📋 计划中 |
 | 感知 · 跟踪 · 规划 | RANSAC + DBSCAN、卡尔曼 + 匈牙利、Frenet 轨迹 | 📋 计划中 |
 | 评测平台 · 数据挖掘 · 闭环学习 | 见[路线图](#路线图) | 📋 计划中 |
@@ -138,6 +138,7 @@ with CarlaSim(dt_s=0.05) as sim:            # 同步模式，每帧 0.05 s
 | --- | --- | --- |
 | 自行车模型绕圈 | 10 m/s，前轮转角 0.1 / 0.2 rad | 直径 55.81 / 27.63 m，与 2L / tan δ 一致；车速加倍时直径不变、一圈用时减半 |
 | PID 上坡 | 目标 10 m/s，坡道 −0.5 m/s² | 只有 P 稳定在 9.00 m/s（稳态误差 1 m/s）；PI 收敛到 10.00 m/s，最高 10.89 m/s |
+| Pure Pursuit 前视距离 | 直道 40 m → 半径 20 m 左转 90° → 直道 40 m；起点偏离路线 3 m，10 m/s；Ld = 2 / 5 / 15 m | 直道越过路线最远 1.23 / 0.27 / 0 m，弯道最大横向误差 0.08 / 0.16 / 1.13 m：Ld 小则来回摆动，Ld 大则切弯；动画讲解见 `docs/a3_pure_pursuit_animation.html` |
 | 坐标转换（CARLA 实车） | Model 3，油门 0.5，steer 0.1，3 s | CARLA：y 24.49 → 26.49，yaw 0.98° → 19.77°；转换后：y −24.49 → −26.49，航向 −0.017 → −0.345 rad，与手算一致 |
 | 同步模式可复现性 | 同一脚本重复运行；`CarlaSim` 重构前后 | 位置、航向、车速逐位相同 |
 | 车型差异 | 同一控制输入，Model 3 vs CarlaCola 卡车 | 3 s 末车速 5.95 vs 1.44 m/s；每行驶 1 m 航向变化均约 0.04 rad，转弯半径与车速无关 |
@@ -168,7 +169,7 @@ highway-sim-eval/
 ├─ examples/         可直接运行的实验脚本
 ├─ scripts/          工具脚本（README 配图等）
 ├─ tests/            单元测试
-└─ docs/images/      README 配图
+└─ docs/            动画讲解（浏览器打开）；images/ 为 README 配图
 ```
 
 后续按功能逐步加入：`scenarios/` 参数化场景库 · `evaluation/` 批量调度与指标 · `dashboard/` 网页看板 · `mining/` 数据挖掘 · `learning/` 闭环训练 · `cpp/` C++ 跟踪器 · `ros2/` ROS 2 发布与录包。
@@ -192,7 +193,8 @@ highway-sim-eval/
 - [x] 坐标系转换（CARLA ↔ 车辆右手系），CARLA 实车验证
 - [x] CARLA 同步模式主循环（`CarlaSim`）
 - [ ] 传感器录制：相机、激光雷达、GNSS、IMU，带帧号与时间戳
-- [ ] PID 速度控制接入 CARLA + Pure Pursuit 横向控制
+- [x] Pure Pursuit 横向控制（模型上验证，前视距离对比实验）
+- [ ] PID 速度控制 + Pure Pursuit 接入 CARLA
 - [ ] 交通流与跟车
 - [ ] 激光雷达感知：地面分割（RANSAC）+ 聚类（DBSCAN）+ 3D 框
 - [ ] 多目标跟踪：卡尔曼滤波 + 匈牙利匹配 + 航迹管理

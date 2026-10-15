@@ -3,6 +3,8 @@ import math
 from ads.control import PID
 from ads.vehicle import VehicleState, step
 from ads.control import to_pedals
+from ads.control import find_lookahead_point, pure_pursuit_steer
+
 
 def test_p_only():
     """只有 P：差 10，kp 0.5 → 加速度 5。"""
@@ -67,3 +69,23 @@ def test_integral_adds_when_not_saturated():
     pid = PID(kp=1.0, ki=0.2, u_max=1.0)
     pid.update(0.5, 0.1)
     assert math.isclose(pid.integral, 0.05)
+
+def test_pure_pursuit_straight_ahead():
+    """前视点在正前方 (10, 0)：不用打方向，转角 0。"""
+    assert pure_pursuit_steer(VehicleState(), 10.0, 0.0) == 0.0
+
+def test_pure_pursuit_hand_calc():
+    """今天手算的：前视点 (10, 10) → 15.64°；挪远到 (20, 20) → 7.97°，打得更少。"""
+    assert math.isclose(math.degrees(pure_pursuit_steer(VehicleState(), 10.0, 10.0)), 15.64, abs_tol=0.01)
+    assert math.isclose(math.degrees(pure_pursuit_steer(VehicleState(), 20.0, 20.0)), 7.97, abs_tol=0.01)
+
+
+def test_lookahead_skips_points_behind():
+    """车在 (50, 0)：不能挑身后的 (0, 0)，要挑前面的 (60, 0)。"""
+    path = [(float(i), 0.0) for i in range(101)]
+    assert find_lookahead_point(path, VehicleState(x_m=50.0), 10.0) == (60.0, 0.0)
+
+def test_lookahead_near_end_uses_last_point():
+    """车在 (95, 0)，前面最远只剩 5 米，不够 10 米：用最后一个点 (100, 0)。"""
+    path = [(float(i), 0.0) for i in range(101)]
+    assert find_lookahead_point(path, VehicleState(x_m=95.0), 10.0) == (100.0, 0.0)
