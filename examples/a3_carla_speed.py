@@ -10,7 +10,7 @@ DURATION_S = 8.0
 
 with CarlaSim(dt_s=0.05) as sim:
     ego = sim.spawn_ego(spawn_index=0)
-    pid = PID(kp=1.0 ,ki=0.2)
+    pid = PID(kp=1.0 ,ki=0.5, u_max=1.0)
     top = 0.0
     for i in range(round(DURATION_S/ sim.dt_s)):
         v = ego.get_velocity()      # 1. 看车速
