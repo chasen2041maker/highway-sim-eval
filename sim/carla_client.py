@@ -61,3 +61,17 @@ class CarlaSim:
         self.world.get_spectator().set_transform(
             carla.Transform(cam_loc, carla.Rotation(pitch=-15, yaw=tf.rotation.yaw))
         )
+
+    def spawn_ahead(self, ref_actor, distance_m: float, blueprint:str = "vehicle.tesla.model3"):
+        """在 ref_actor 车头正前方 distance_m 米（车中心到车中心）放一辆车，朝向相同。出门时自动删掉。"""
+        tf = ref_actor.get_transform()
+        loc = tf.location + tf.get_forward_vector() * distance_m # 沿车头方向往前走 distance_m 米
+        loc.z += 0.3   # 抬高 0.3 米再放，免得卡进地面
+        bp = self.world.get_blueprint_library().find(blueprint)
+        car = self.world.spawn_actor(bp, carla.Transform(loc, tf.rotation))
+        self._actors.append(car)
+        self.world.tick()
+        return car
+
+
+    
