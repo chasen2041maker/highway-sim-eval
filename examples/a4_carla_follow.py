@@ -3,7 +3,7 @@
 import math
 import time
 import carla
-from ads.control import to_pedals
+from ads.control import PID, to_pedals
 from ads.planning import idm_accel
 from sim.carla_client import CarlaSim
 
@@ -15,6 +15,7 @@ WARMUP_S = 1.0            # 前 1 秒两辆车都被“推着”跑 10 m/s（滚
 BRAKE_AT_S = 5.0          # IDM 接手后第 5 秒，前车开始急刹
 LEAD_BRAKE_MPS2 = -5.0    # 前车每秒车速减 5，2 秒停下
 DURATION_S = 12.0         # IDM 接手后开 12 秒
+CLOSED_LOOP = True        # True：IDM → 影子车车速 → PID → 踏板；False：IDM 的数直接当踏板（前半段）
 
 def push(car, speed_mps):
     """剧本：不踩油门，直接把车速设成 speed_mps（沿车头方向）。只给前车和滚动起步用。"""
@@ -29,6 +30,8 @@ with CarlaSim(dt_s=0.05) as sim:
     half_len = ego.bounding_box.extent.x              # 半个车长（车中心到车头）
     lead = sim.spawn_ahead(ego,START_GAP_M + 2 * half_len)    # 前车也是 Model 3：车中心距 = 车距 + 两个半车长
     lead_speed = START_MPS
+    shadow = START_MPS             # 影子车的车速，从 10 开始
+    pid = PID(kp=1.0, ki=0.5, u_max=1.0)        # 第 ① 步调好的参数
     min_gap, hardest, real_hardest, last_speed = 99.0, 0.0, 0.0, START_MPS
 
     for i in range(round((WARMUP_S + DURATION_S) / sim.dt_s)):
@@ -47,8 +50,14 @@ with CarlaSim(dt_s=0.05) as sim:
             push(ego, START_MPS)
             accel, throttle, brake = 0.0, 0.0, 0.0
         else:          # ③ IDM 算加速度 → ④ 直接当踏板
-            accel = idm_accel(speed, speed_of(lead), gap, TARGET_MPS)
-            throttle, brake = to_pedals(accel)
+            accel = idm_accel(speed, speed_of(lead), gap, TARGET_MPS)    
+            if CLOSED_LOOP:
+                shadow = max(0.0, shadow + accel * sim.dt_s)    # 影子车：完全照 IDM 的加速度开（= A1 的假车）
+                u = pid.update(shadow - speed, sim.dt_s)        # 真车：用 PID 追影子车的车速
+            else:
+                u = accel                   # 前半段：IDM 的数直接当踏板
+            throttle, brake = to_pedals(u)
+
             ego.apply_control(carla.VehicleControl(throttle=throttle,brake=brake))
             min_gap = min(min_gap, gap)
             hardest = min(hardest, accel)
@@ -58,7 +67,7 @@ with CarlaSim(dt_s=0.05) as sim:
             last_speed = speed
             if t >= 0:
                 real_hardest = min(real_hardest, real)
-                print(f"{t:4.1f} 秒  前车 {speed_of(lead):5.2f}  我 {speed:5.2f}  车距 {gap:5.2f}  "
+                print(f"{t:4.1f} 秒  前车 {speed_of(lead):5.2f}  我 {speed:5.2f}  影子 {shadow:5.2f} 车距 {gap:5.2f}  "
                       f"IDM 要 {accel:5.2f}  油门 {throttle:.2f}  刹车 {brake:.2f}  实际 {real:5.2f}")
         sim.tick()
         sim.follow(ego)
