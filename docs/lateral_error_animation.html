@@ -113,6 +113,18 @@ button[aria-pressed="true"] { border-color: var(--new); box-shadow: inset 0 0 0 
   font: 400 12px var(--font-num); background: var(--chip); border: 1px solid var(--line); border-radius: 4px;
   padding: 2px 6px; overflow-x: auto; white-space: pre; display: block; min-width: 0;
 }
+.bench2 { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; margin-top: 10px; }
+@media (max-width: 880px) { .bench2 { grid-template-columns: minmax(0, 1fr); } }
+.mside { display: grid; gap: 10px; min-width: 0; }
+.seglist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font: 400 13px var(--font-num); font-variant-numeric: tabular-nums; }
+.seglist li { padding: 4px 8px; border-radius: 6px; background: var(--chip); }
+.seglist li.best { background: var(--new-soft); color: var(--new); font-weight: 600; }
+.msum { margin: 0; font-size: 14px; }
+.msum b { color: var(--new); font-family: var(--font-num); }
+.codeblk { margin: 0; background: var(--chip); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-x: auto; font: 400 12px/1.5 var(--font-num); }
+code.inl { font: 400 13px var(--font-num); background: var(--chip); padding: 0 4px; border-radius: 3px; }
+.mseg { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.mfoot { fill: var(--muted); }
 .drive { display: grid; gap: 12px; }
 .drivebar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .drivebar label { font-size: 14px; display: inline-flex; gap: 8px; align-items: center; }
@@ -334,6 +346,45 @@ button[aria-pressed="true"] { border-color: var(--new); box-shadow: inset 0 0 0 
     </div>
   </section>
 
+  <section class="panel multi" aria-label="拐弯的车道：很多小段">
+    <h2>③ 车道会拐弯：中心线是很多小段，每一段都量一次，取最小</h2>
+    <p class="hint">还是从天上往下看。一个 <code class="inl">point_to_segment_m</code> 只认一小段（两颗红点之间），到段的尽头线就断了，所以车开过 B 时它只能斜着量到 B。B 后面归下一段管。拖动 P 试试。</p>
+    <div class="bench2">
+      <svg id="multi" viewBox="0 0 600 360" aria-label="一条往左拐的车道中心线，由 6 小段组成，车到每一段都有一条距离线，最短的是蓝色">
+        <rect class="paper" x="0" y="0" width="600" height="360"></rect>
+        <line id="mExtLine" class="ext"></line>
+        <polyline id="mPath" class="seg" fill="none"></polyline>
+        <g id="mSegs"></g>
+        <line id="mExtDist" class="oldhyp"></line>
+        <text id="mExtLab" class="lbl amber num"></text>
+        <line id="mBest" class="newline"></line>
+        <text id="mBestLab" class="lbl blue big num"></text>
+        <g id="mNails"></g>
+        <g id="mCar" class="handle" tabindex="0" role="slider" aria-label="车的中心点 P，可拖动或用方向键移动">
+          <circle class="phandle" r="10"></circle>
+          <circle class="carbody" r="3.5"></circle>
+        </g>
+        <text id="mLabP" class="lbl num" text-anchor="middle"></text>
+        <text class="ax" x="12" y="20">红点每 0.5 米一颗 · 车道往左拐</text>
+      </svg>
+      <div class="mside">
+        <div class="row" id="mPresets">
+          <button type="button" data-p="0.70,0.30">(0.70, 0.30) 开过 B</button>
+          <button type="button" data-p="2.00,0.10">(2.00, 0.10) 拐弯外侧</button>
+        </div>
+        <label class="toggle" for="mExt"><input type="checkbox" id="mExt"> 把第 1 段 A→B 当成无限长的直线（橙）</label>
+        <ol class="seglist" id="mList"></ol>
+        <p class="msum" id="mSum"></p>
+        <p class="cap">下一步要敲的（先看懂图，不用现在敲）</p>
+        <pre class="codeblk"><code>def lateral_error_m(path, x_m, y_m):
+    """车到中心线（一串红点连成的折线）的最短距离：每段量一次，取最小。"""
+    segs = zip(path, path[1:])     # 相邻两颗红点配成一段
+    return min(point_to_segment_m(x_m, y_m, ax, ay, bx, by)
+               for (ax, ay), (bx, by) in segs)</code></pre>
+      </div>
+    </div>
+  </section>
+
   <section class="panel drive" aria-label="车沿着路开时两把尺子的读数">
     <h2>车沿着路开：两把尺子的读数</h2>
     <div class="drivebar">
@@ -368,7 +419,7 @@ button[aria-pressed="true"] { border-color: var(--new); box-shadow: inset 0 0 0 
       <li>老尺子在<b>钉子正旁边</b>时是对的（等于车离中心线多远），在<b>两颗钉子正中间</b>时多报得最多：√(0.30² + 0.25²) = 0.39。</li>
       <li>把滑块拖到 0：车压在线上，真实是 0，老尺子还在 0 到 0.25 之间来回跳。</li>
       <li>10-16 在 CARLA 里一直报 0.13 米也是这个原因：车每秒正好走 12 个点间隔，每次打印都停在两点之间的同一个位置。</li>
-      <li>路上有很多颗钉子时，新尺子每一段都量一次、取最小（第 3 步要写的）。</li>
+      <li>路上有很多颗红点时，每一段都量一次、取最小（见上面 ③）。</li>
     </ul>
   </section>
 
@@ -394,7 +445,7 @@ button[aria-pressed="true"] { border-color: var(--new); box-shadow: inset 0 0 0 
   var fig = $("fig");
 
   function setLine(id, a, b) {
-    var el = $(id);
+    var el = typeof id === "string" ? $(id) : id;
     el.setAttribute("x1", a[0].toFixed(1)); el.setAttribute("y1", a[1].toFixed(1));
     el.setAttribute("x2", b[0].toFixed(1)); el.setAttribute("y2", b[1].toFixed(1));
   }
@@ -673,6 +724,98 @@ button[aria-pressed="true"] { border-color: var(--new); box-shadow: inset 0 0 0 
     }
     requestAnimationFrame(frame);
   }
+
+
+  // ---------- multi-segment curved lane ----------
+  var MS = 220, MX = 40, MY = 318;
+  var mpath = [[0, 0], [0.5, 0], [1.0, 0]];
+  for (var mk2 = 1; mk2 <= 4; mk2++) {
+    var th = -Math.PI / 2 + mk2 * (0.5 / 1.5);
+    mpath.push([1.0 + 1.5 * Math.cos(th), 1.5 + 1.5 * Math.sin(th)]);
+  }
+  var msx = function (x) { return MX + x * MS; }, msy = function (y) { return MY - y * MS; };
+  var mP = { x: 0.70, y: 0.30 };
+  var mSvg = $("multi"), mLines = [], mFeet = [], mItems = [];
+  (function buildMulti() {
+    $("mPath").setAttribute("points", mpath.map(function (q) { return msx(q[0]).toFixed(1) + "," + msy(q[1]).toFixed(1); }).join(" "));
+    var names = ["A", "B", "C"];
+    for (var i = 0; i < mpath.length; i++) {
+      mk("circle", { "class": "nail", cx: msx(mpath[i][0]).toFixed(1), cy: msy(mpath[i][1]).toFixed(1), r: 7 }, $("mNails"));
+      if (names[i]) mk("text", { "class": "lbl num", x: msx(mpath[i][0]).toFixed(1), y: (msy(mpath[i][1]) + 24).toFixed(1), "text-anchor": "middle" }, $("mNails")).textContent = names[i];
+    }
+    for (var j = 0; j < mpath.length - 1; j++) {
+      mLines.push(mk("line", { "class": "mseg" }, $("mSegs")));
+      mFeet.push(mk("circle", { "class": "mfoot", r: 3.5 }, $("mSegs")));
+      mItems.push($("mList").appendChild(document.createElement("li")));
+    }
+  })();
+  function segInfo(px, py, a, b) {
+    var dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+    var tr = ((px - a[0]) * dx + (py - a[1]) * dy) / L2, t = clamp(tr, 0, 1);
+    var fx = a[0] + t * dx, fy = a[1] + t * dy;
+    return { d: Math.hypot(px - fx, py - fy), fx: fx, fy: fy, tr: tr };
+  }
+  function renderMulti() {
+    var best = -1, bd = Infinity, infos = [];
+    for (var i = 0; i < mpath.length - 1; i++) {
+      var g = segInfo(mP.x, mP.y, mpath[i], mpath[i + 1]);
+      infos.push(g);
+      if (g.d < bd - 1e-12) { bd = g.d; best = i; }
+    }
+    var p = [msx(mP.x), msy(mP.y)];
+    for (var k = 0; k < infos.length; k++) {
+      var f = [msx(infos[k].fx), msy(infos[k].fy)];
+      setLine(mLines[k], p, f);
+      mFeet[k].setAttribute("cx", f[0].toFixed(1)); mFeet[k].setAttribute("cy", f[1].toFixed(1));
+      var nm = k === 0 ? "（A→B）" : k === 1 ? "（B→C）" : "";
+      var note = infos[k].tr > 1 ? " 垂足落到段外，拉回段尾" : infos[k].tr < 0 ? " 垂足落到段外，拉回段头" : " 垂足在段上";
+      mItems[k].textContent = "第 " + (k + 1) + " 段" + nm + "：" + f2(infos[k].d) + note + (k === best ? "  ← 最小，就用它" : "");
+      mItems[k].className = k === best ? "best" : "";
+    }
+    var bf = [msx(infos[best].fx), msy(infos[best].fy)];
+    setLine("mBest", p, bf);
+    var ddx = p[0] - bf[0], ddy = p[1] - bf[1], ddl = Math.hypot(ddx, ddy) || 1;
+    ddx /= ddl; ddy /= ddl;
+    setText("mBestLab", [p[0] + ddx * 26, p[1] + ddy * 26 + 5], "最小 " + f2(bd), ddx > 0.3 ? "start" : ddx < -0.3 ? "end" : "middle");
+    $("mSum").innerHTML = "lateral_error_m = 6 段里最小的那个 = <b>" + f2(bd) + " 米</b>";
+    var ext = $("mExt").checked;
+    ["mExtLine", "mExtDist", "mExtLab"].forEach(function (id) { $(id).style.display = ext ? "" : "none"; });
+    if (ext) {
+      setLine("mExtLine", [0, msy(0)], [600, msy(0)]);
+      setLine("mExtDist", p, [p[0], msy(0)]);
+      setText("mExtLab", [p[0] - 8, msy(0) + 22], "延长线说 " + f2(Math.abs(mP.y)), "end");
+    }
+    $("mCar").setAttribute("transform", "translate(" + p[0].toFixed(1) + " " + p[1].toFixed(1) + ")");
+    setText("mLabP", [p[0] - 14, p[1] - 14], "P " + pt(mP), "end");
+  }
+  var mDrag = false;
+  $("mCar").addEventListener("pointerdown", function (e) {
+    mDrag = true; e.preventDefault();
+    if (this.setPointerCapture) { try { this.setPointerCapture(e.pointerId); } catch (err) {} }
+  });
+  mSvg.addEventListener("pointermove", function (e) {
+    if (!mDrag) return;
+    var m = mSvg.getScreenCTM(); if (!m) return;
+    var q = mSvg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; q = q.matrixTransform(m.inverse());
+    mP = { x: clamp(r2((q.x - MX) / MS), -0.1, 2.55), y: clamp(r2((MY - q.y) / MS), -0.15, 1.35) };
+    renderMulti();
+  });
+  window.addEventListener("pointerup", function () { mDrag = false; });
+  $("mCar").addEventListener("keydown", function (e) {
+    var k = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+    if (!k) return;
+    e.preventDefault();
+    var stp = e.shiftKey ? 0.05 : 0.01;
+    mP = { x: clamp(r2(mP.x + k[0] * stp), -0.1, 2.55), y: clamp(r2(mP.y + k[1] * stp), -0.15, 1.35) };
+    renderMulti();
+  });
+  $("mPresets").addEventListener("click", function (e) {
+    var btn = e.target.closest("button"); if (!btn) return;
+    var q = btn.getAttribute("data-p").split(",").map(Number);
+    mP = { x: q[0], y: q[1] }; renderMulti();
+  });
+  $("mExt").addEventListener("change", renderMulti);
+  renderMulti();
 
   render();
   drawCurves(); drawDrive(); setPlaying(drv.playing);
