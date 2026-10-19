@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>激光雷达扫一圈</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: side view (one beam at a time, the shadow) on top, top view (the head spinning one full turn) below, then where the 19897 points went, then lidar vs 360 surround view. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --accent: #1e66d6; --groundpt: #8d959d; --shade: #e6eaee; --hatch: #b9c2cb; --lane: #e8f0fb;
+  --o0: #d23b3b; --o1: #2a78d6; --o2: #1a9a6c; --o3: #9a3fc4; --o4: #d96f00;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --accent: #62a6ff; --groundpt: #6c7883; --shade: #212a33; --hatch: #3a4652; --lane: #1b2a3c;
+    --o0: #ff6b6b; --o1: #5aa2ff; --o2: #3fd29a; --o3: #c77dff; --o4: #ffa040; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --accent: #62a6ff; --groundpt: #6c7883; --shade: #212a33; --hatch: #3a4652; --lane: #1b2a3c;
+  --o0: #ff6b6b; --o1: #5aa2ff; --o2: #3fd29a; --o3: #c77dff; --o4: #ffa040; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1000px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 17px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { margin-top: 4px; color: var(--muted); max-width: 72ch; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; display: grid; gap: 10px; }
+.hint { color: var(--muted); font-size: 13.5px; max-width: 78ch; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+canvas { display: block; width: 100%; border-radius: 6px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.controls label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+input[type="range"] { width: min(320px, 70vw); accent-color: var(--accent); }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+button, select {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--chip); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 500; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.readout { background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 14.5px; }
+.readout b { font-weight: 700; }
+.formula { font-family: var(--font-num); font-size: 13.5px; color: var(--muted); }
+.key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
+.stats .num { font-weight: 600; }
+.bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+.bar div { height: 100%; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+td:first-child { color: var(--muted); white-space: nowrap; }
+.takeaway { font-weight: 500; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>激光雷达扫一圈</h1>
+    <p class="lede">雷达装在我的车顶，离地 1.8 米。32 根激光竖着排成一列，整列一起转圈，每转 0.4° 打一次。这页用的是 <code>sim/fake_lidar.py</code> 同一个假雷达、同一个场景，点的个数和你跑出来的一样（只有 2 厘米的测距噪声是另外随机抽的）。</p>
+  </header>
+
+  <section class="panel" aria-labelledby="h-side">
+    <h2 id="h-side">① 从侧面看：一列 32 根激光往哪打</h2>
+    <p class="hint">只看正前方这一刀（我这条车道）。横轴 x 是往前多少米，竖轴 z 是高度。为了看得清，<b>竖直方向放大了 <span id="exag" class="num">6</span> 倍</b>，所以激光看起来比真实陡。</p>
+    <canvas id="side" aria-label="侧视图：雷达、地面、前车和 32 根激光"></canvas>
+    <div class="key">
+      <span><i class="sw" style="background:var(--ink)"></i>粗线 = 你选的那一根</span>
+      <span><i class="sw" style="background:var(--groundpt)"></i>细线 = 其他激光，圆点 = 落地的位置</span>
+      <span><i class="sw" style="background:var(--o0)"></i>红框 = 前车（车尾 12.7 米，高 1.5 米）</span>
+      <span><i class="sw" style="background:var(--hatch)"></i>斜纹 = 影子（激光照不到）</span>
+    </div>
+    <div class="controls">
+      <label for="beam">选一根激光 <input id="beam" type="range" min="1" max="32" step="1" value="13"> <span id="beamLabel" class="num"></span></label>
+      <label for="carOn"><input id="carOn" type="checkbox" checked> 有前车</label>
+      <label for="onlySide"><input id="onlySide" type="checkbox"> 只画这一根</label>
+      <span class="controls">快速看：
+        <button type="button" data-beam="20">第 20 根</button>
+        <button type="button" data-beam="13">第 13 根</button>
+        <button type="button" data-beam="9">第 9 根</button>
+      </span>
+    </div>
+    <div class="readout" id="readout" aria-live="polite"></div>
+    <p class="formula">落地距离 = 雷达高度 ÷ tan(向下的角度) = 1.8 ÷ tan θ</p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-top">
+    <h2 id="h-top">② 从天上往下看：整列激光转一圈</h2>
+    <p class="hint">真车的雷达一秒转 10 圈，这里放慢了。转的时候，每一根往下打的激光都在地上画出一个圈。离得越远，相邻两圈隔得越开。东西背后是空白，那是它投下的影子。</p>
+    <canvas id="top" aria-label="俯视图：一圈点云"></canvas>
+    <div class="key" id="topKey"></div>
+    <div class="controls">
+      <button id="play" class="primary" type="button">▶ 慢放一圈</button>
+      <button id="full" type="button">显示整圈</button>
+      <label for="speed">速度
+        <select id="speed">
+          <option value="8">慢（8 秒一圈）</option>
+          <option value="3">快（3 秒一圈）</option>
+        </select>
+      </label>
+      <label for="onlyBeam"><input id="onlyBeam" type="checkbox"> 只看上面选的那一根</label>
+    </div>
+    <div class="stats" id="stats" aria-live="polite"></div>
+  </section>
+
+  <section class="split">
+    <div class="panel" aria-labelledby="h-where">
+      <h2 id="h-where">③ 这一圈的点都落在哪</h2>
+      <div class="bar" id="bar" role="img" aria-label="地面点和东西上的点各占多少"></div>
+      <div class="key" id="barKey"></div>
+      <p class="hint">朝上的 8 根永远回不来（场景里的东西都比雷达矮）；往下的 24 根里，最平的 2 根要 320 米、64 米外才落地，超过 50 米，也回不来。剩下 22 根落在地上成 22 个圈：<span class="num">17</span> 圈挤在 3.1～10.9 米，只有 <span class="num">5</span> 圈在 12.7～35.5 米。</p>
+      <p class="takeaway" id="takeaway"></p>
+    </div>
+    <div class="panel" aria-labelledby="h-360">
+      <h2 id="h-360">④ 和 360 影像有什么不一样</h2>
+      <p class="hint">两者都是看车的一圈。差别在于：影像是照片，激光雷达的每个点自带距离。</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th></th><th>360 环视影像</th><th>激光雷达</th></tr></thead>
+          <tbody>
+            <tr><td>装在哪</td><td>车身四周 4 个鱼眼摄像头</td><td>车顶（或车顶前沿）一个激光头</td></tr>
+            <tr><td>拿到什么</td><td>照片：有颜色，不知道多远</td><td>点：每个点直接是 (x, y, z) 米</td></tr>
+            <tr><td>看多远</td><td>车身周围几米，停车用</td><td>几十米到一两百米，开车用</td></tr>
+            <tr><td>晚上</td><td>要靠灯</td><td>自己发光，白天晚上一样</td></tr>
+            <tr><td>怕什么</td><td>强光、逆光</td><td>被挡住（影子）、远处点稀</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+// ===== fake lidar (same as sim/fake_lidar.py) =====
+const H_LIDAR = 1.8, RANGE = 50, N_CH = 32, N_AZ = 900;
+const SCENE = [
+  { zh: "前车", cx: 15.0, cy: 0.0, L: 4.6, W: 1.9, H: 1.5, yaw: 0.0 },
+  { zh: "左车道的车", cx: 24.0, cy: 3.6, L: 4.6, W: 1.9, H: 1.6, yaw: 0.05 },
+  { zh: "右边停的车", cx: 9.0, cy: -4.5, L: 4.4, W: 1.8, H: 1.5, yaw: -0.25 },
+  { zh: "行人", cx: 11.0, cy: 6.0, L: 0.6, W: 0.6, H: 1.7, yaw: 0.0 },
+  { zh: "后车", cx: -12.0, cy: 0.3, L: 4.6, W: 1.9, H: 1.5, yaw: 0.0 },
+];
+const ELEV = Array.from({ length: N_CH }, (_, i) => 10 + (-40) * i / (N_CH - 1));   // +10° .. -30°
+
+function hitBox(dx, dy, dz, b) {
+  const c = Math.cos(-b.yaw), s = Math.sin(-b.yaw);
+  const ox = -b.cx, oy = -b.cy, oz = H_LIDAR;
+  const p = [c * ox - s * oy, s * ox + c * oy, oz];
+  const d = [c * dx - s * dy, s * dx + c * dy, dz];
+  const lo = [-b.L / 2, -b.W / 2, 0], hi = [b.L / 2, b.W / 2, b.H];
+  let tn = -Infinity, tf = Infinity;
+  for (let k = 0; k < 3; k++) {
+    if (d[k] === 0) { if (p[k] < lo[k] || p[k] > hi[k]) return Infinity; continue; }
+    let t1 = (lo[k] - p[k]) / d[k], t2 = (hi[k] - p[k]) / d[k];
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    if (t1 > tn) tn = t1;
+    if (t2 < tf) tf = t2;
+  }
+  return (tf >= tn && tn > 0) ? tn : Infinity;
+}
+
+function castRay(dx, dy, dz, scene) {
+  let best = dz < 0 ? -H_LIDAR / dz : Infinity, which = -1;
+  for (let k = 0; k < scene.length; k++) {
+    const t = hitBox(dx, dy, dz, scene[k]);
+    if (t < best) { best = t; which = k; }
+  }
+  return { t: best, label: which };
+}
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function scanAll() {
+  const rnd = mulberry32(7);
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+  const xs = [], ys = [], zs = [], lab = [], ch = [], azStart = new Int32Array(N_AZ + 1);
+  for (let a = 0; a < N_AZ; a++) {
+    azStart[a] = xs.length;
+    const az = (a * 0.4) * Math.PI / 180;
+    for (let e = 0; e < N_CH; e++) {
+      const el = ELEV[e] * Math.PI / 180;
+      const dx = Math.cos(el) * Math.cos(az), dy = Math.cos(el) * Math.sin(az), dz = Math.sin(el);
+      const r = castRay(dx, dy, dz, SCENE);
+      if (r.t < RANGE) {
+        const t = r.t + 0.02 * gauss();
+        xs.push(dx * t); ys.push(dy * t); zs.push(dz * t); lab.push(r.label); ch.push(e);
+      }
+    }
+  }
+  azStart[N_AZ] = xs.length;
+  return { xs: Float32Array.from(xs), ys: Float32Array.from(ys), zs: Float32Array.from(zs),
+           lab: Int8Array.from(lab), ch: Uint8Array.from(ch), azStart };
+}
+// ===== end fake lidar =====
+
+const PC = scanAll();
+const N = PC.xs.length;
+const counts = { ground: 0, obj: SCENE.map(() => 0), laneBefore: 0, laneAfter: 0 };
+for (let i = 0; i < N; i++) {
+  const l = PC.lab[i];
+  if (l < 0) {
+    counts.ground++;
+    if (Math.abs(PC.ys[i]) < 0.9) {
+      if (PC.xs[i] > 3 && PC.xs[i] < 12.7) counts.laneBefore++;
+      if (PC.xs[i] > 17.3 && PC.xs[i] < 35) counts.laneAfter++;
+    }
+  } else counts.obj[l]++;
+}
+const nObj = N - counts.ground;
+
+const $ = (id) => document.getElementById(id);
+const css = () => {
+  const s = getComputedStyle(document.documentElement);
+  const g = (n) => s.getPropertyValue(n).trim();
+  return { surface: g("--surface"), ink: g("--ink"), muted: g("--muted"), line: g("--line"), chip: g("--chip"),
+           accent: g("--accent"), groundpt: g("--groundpt"), shade: g("--shade"), hatch: g("--hatch"), lane: g("--lane"),
+           o: [g("--o0"), g("--o1"), g("--o2"), g("--o3"), g("--o4")], num: g("--font-num"), body: g("--font-body") };
+};
+const fmt = (v, n = 1) => v.toFixed(n);
+const angleText = (e) => e >= 0 ? `向上 ${fmt(e, 2)}°` : `向下 ${fmt(-e, 2)}°`;
+
+function setupCanvas(cv, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  cv.style.height = h + "px";
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+// ===== side view =====
+function sideBeam(e, carOn) {
+  const el = e * Math.PI / 180, dx = Math.cos(el), dz = Math.sin(el);
+  const tg = dz < 0 ? -H_LIDAR / dz : Infinity;
+  const tc = carOn ? hitBox(dx, 0, dz, SCENE[0]) : Infinity;
+  const t = Math.min(tg, tc);
+  const what = !isFinite(t) ? "sky" : (tc < tg ? "car" : "ground");
+  return { dx, dz, tg, tc, t, what, back: t < RANGE };
+}
+
+function drawSide() {
+  const C = css();
+  const cv = $("side");
+  const w = cv.parentElement.clientWidth - 32;
+  const EX = w < 600 ? 9 : 6;
+  $("exag").textContent = EX;
+  const X0 = -2, X1 = 40, Z0 = -2.25, Z1 = 0.95;
+  const sx = w / (X1 - X0), sz = sx * EX;
+  const h = Math.round((Z1 - Z0) * sz);
+  const ctx = setupCanvas(cv, w, h);
+  const X = (x) => (x - X0) * sx, Y = (z) => (Z1 - z) * sz;
+  const carOn = $("carOn").checked, sel = +$("beam").value - 1;
+  const small = w < 600;
+  ctx.fillStyle = C.surface; ctx.fillRect(0, 0, w, h);
+
+  // ground
+  ctx.fillStyle = C.chip; ctx.fillRect(0, Y(-1.8), w, h - Y(-1.8));
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(0, Y(-1.8)); ctx.lineTo(w, Y(-1.8)); ctx.stroke();
+  ctx.font = `${small ? 10 : 11.5}px ${C.num}`; ctx.fillStyle = C.muted; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let x = 0; x <= 40; x += small ? 10 : 5) {
+    ctx.beginPath(); ctx.moveTo(X(x), Y(-1.8)); ctx.lineTo(X(x), Y(-1.8) + 4); ctx.stroke();
+    ctx.fillText(`${x} m`, X(x), Y(-1.8) + 6);
+  }
+
+  // shadow behind the lead car
+  const b = SCENE[0], rear = b.cx - b.L / 2, front = b.cx + b.L / 2, top = -H_LIDAR + b.H;
+  if (carOn) {
+    const k = top / front;              // line from the lidar over the front-top corner: z = k·x
+    const poly = [[front, -1.8], [front, top], [X1, k * X1], [X1, -1.8]];
+    ctx.save();
+    ctx.beginPath(); poly.forEach(([x, z], i) => i ? ctx.lineTo(X(x), Y(z)) : ctx.moveTo(X(x), Y(z))); ctx.closePath();
+    ctx.fillStyle = C.shade; ctx.fill(); ctx.clip();
+    ctx.strokeStyle = C.hatch; ctx.lineWidth = 1;
+    for (let s = -h; s < w + h; s += 9) { ctx.beginPath(); ctx.moveTo(s, h); ctx.lineTo(s + h, 0); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  // beams
+  for (let i = 0; i < N_CH; i++) {
+    if (i === sel || $("onlySide").checked) continue;
+    const r = sideBeam(ELEV[i], carOn);
+    const tEnd = r.back ? r.t : 120;
+    ctx.strokeStyle = C.groundpt; ctx.globalAlpha = r.back ? 0.55 : 0.28; ctx.lineWidth = 0.9;
+    ctx.setLineDash(r.back ? [] : [4, 4]);
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(r.dx * tEnd), Y(r.dz * tEnd)); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    if (r.back) {
+      ctx.fillStyle = r.what === "car" ? C.o[0] : C.groundpt;
+      ctx.beginPath(); ctx.arc(X(r.dx * r.t), Y(r.dz * r.t), 2.4, 0, 2 * Math.PI); ctx.fill();
+    }
+  }
+  // selected beam on top
+  {
+    const r = sideBeam(ELEV[sel], carOn);
+    const tEnd = r.back ? r.t : 120;
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 2.6; ctx.setLineDash(r.back ? [] : [7, 5]);
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(r.dx * tEnd), Y(r.dz * tEnd)); ctx.stroke();
+    ctx.setLineDash([]);
+    if (r.back) {
+      ctx.fillStyle = r.what === "car" ? C.o[0] : C.ink;
+      ctx.beginPath(); ctx.arc(X(r.dx * r.t), Y(r.dz * r.t), 5, 0, 2 * Math.PI); ctx.fill();
+      ctx.strokeStyle = C.surface; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    if (carOn && r.what === "car" && isFinite(r.tg) && r.tg * r.dx < X1) {   // where it would have landed
+      ctx.strokeStyle = C.ink; ctx.globalAlpha = 0.35; ctx.lineWidth = 1.6; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(X(r.dx * r.t), Y(r.dz * r.t)); ctx.lineTo(X(r.dx * r.tg), Y(-1.8)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(X(r.dx * r.tg), Y(-1.8), 4.5, 0, 2 * Math.PI); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // my car + lidar
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1.2; ctx.fillStyle = C.chip;
+  ctx.beginPath(); ctx.rect(X(-2.3), Y(-0.3), (4.6) * sx, 1.5 * sz); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = C.ink;
+  ctx.beginPath(); ctx.moveTo(X(0), Y(0) - 7); ctx.lineTo(X(0) - 6, Y(0) + 4); ctx.lineTo(X(0) + 6, Y(0) + 4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(X(0), Y(0) + 4); ctx.lineTo(X(0), Y(-0.3)); ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.stroke();
+
+  // lead car
+  if (carOn) {
+    ctx.fillStyle = C.surface; ctx.globalAlpha = 0.85;
+    ctx.fillRect(X(rear), Y(top), b.L * sx, b.H * sz); ctx.globalAlpha = 1;
+    ctx.strokeStyle = C.o[0]; ctx.lineWidth = 2;
+    ctx.strokeRect(X(rear), Y(top), b.L * sx, b.H * sz);
+    // the flattest line that clears the roof
+    ctx.strokeStyle = C.o[0]; ctx.lineWidth = 1.2; ctx.setLineDash([6, 4]); ctx.globalAlpha = 0.8;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(X1), Y(top / front * X1)); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+
+  // labels
+  const fs = small ? 10.5 : 12.5;
+  ctx.font = `${fs}px ${C.body}`; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.fillStyle = C.ink;
+  ctx.fillText(small ? "雷达 (0, 0)" : "雷达：原点 (0, 0)，离地 1.8 米", X(0) + 9, Y(0) - 12);
+  ctx.fillStyle = C.muted;
+  ctx.fillText("我的车", X(-1.9), Y(-1.05));
+  ctx.textAlign = "right";
+  ctx.fillText("地面 z = −1.8", w - 4, Y(-1.8) - 9);
+  if (carOn) {
+    ctx.textAlign = "center"; ctx.fillStyle = C.o[0];
+    ctx.fillText("前车", X(b.cx), Y(-1.05));
+    if (!small) {
+      ctx.textAlign = "left"; ctx.fillStyle = C.o[0];
+      const lx = 25, lz = top / front * lx;
+      ctx.fillText("虚线：能越过车顶的最斜一根，要 104 米外才落地", X(lx) - 30, Y(lz) - 14);
+    }
+    ctx.textAlign = "center"; ctx.fillStyle = C.ink;
+    ctx.font = `600 ${fs + 1}px ${C.body}`;
+    ctx.fillText("影子：这段地面照不到", X(small ? 29 : 28.5), Y(-1.45));
+  }
+  ctx.font = `${fs - 1}px ${C.num}`; ctx.fillStyle = C.muted; ctx.textAlign = "left";
+  const e1 = sideBeam(ELEV[0], false);
+  ctx.fillText("+10°", X(e1.dx * 4) + 4, Y(e1.dz * 4) + 4);
+  const eL = sideBeam(ELEV[N_CH - 1], false);
+  ctx.fillText("−30°", X(eL.dx * eL.t) + 6, Y(-1.8) - 8);
+
+  // readout
+  const r = sideBeam(ELEV[sel], carOn), e = ELEV[sel];
+  const rWithout = sideBeam(e, false);
+  $("beamLabel").textContent = `第 ${sel + 1} 根 · ${angleText(e)}`;
+  let html = `<b>第 ${sel + 1} 根</b>（1 = 最上，32 = 最下），${angleText(e)}。`;
+  if (e >= 0) {
+    html += "朝上打，打向天空。场景里的东西都比雷达矮，所以它<b>永远回不来</b>。";
+  } else if (r.what === "car") {
+    const zHit = r.dz * r.t;
+    html += `没有前车时，它落地在 <span class="num">1.8 ÷ tan ${fmt(-e, 2)}° = ${fmt(rWithout.tg * rWithout.dx)}</span> 米。` +
+      `现在前车车尾在 12.7 米，先把它挡住了：打在车尾<b>离地 <span class="num">${fmt(zHit + 1.8, 2)}</span> 米</b>处，回来的是前车上的一个点。它被车尾挡住，飞不到前车背后的地面上。`;
+  } else if (r.what === "ground" && r.back) {
+    html += `落地在 <span class="num">1.8 ÷ tan ${fmt(-e, 2)}° = <b>${fmt(r.tg * r.dx)}</b></span> 米。碰到地面就反射回来，带回<b>一个地面点</b>。`;
+    if (carOn && r.tg * r.dx > 12.7) html += "";
+  } else {
+    const land = rWithout.tg * rWithout.dx;
+    const overRoof = carOn && e < 0 && !isFinite(r.tc);
+    html += (overRoof ? "它够平，从前车车顶上越过去了。但是" : "它太平了，") +
+      `要到 <span class="num">1.8 ÷ tan ${fmt(-e, 2)}° = <b>${fmt(land, 0)}</b></span> 米外才落地，超过雷达能测的 50 米，<b>没有回来</b>。`;
+  }
+  $("readout").innerHTML = html;
+}
+
+// ===== top view =====
+let sweepAz = N_AZ, playing = false, lastT = 0;
+function drawTop() {
+  const C = css();
+  const cv = $("top");
+  const w = cv.parentElement.clientWidth - 32;
+  const X0 = -25, X1 = 40, Y0 = -18, Y1 = 18;
+  const s = w / (X1 - X0), h = Math.round((Y1 - Y0) * s);
+  const ctx = setupCanvas(cv, w, h);
+  const X = (x) => (x - X0) * s, Y = (y) => (Y1 - y) * s;
+  const small = w < 600;
+  ctx.fillStyle = C.surface; ctx.fillRect(0, 0, w, h);
+  // my lane strip
+  ctx.fillStyle = C.lane; ctx.fillRect(0, Y(0.9), w, 1.8 * s);
+  // points up to the current azimuth
+  const only = $("onlyBeam").checked, sel = +$("beam").value - 1;
+  const azI = Math.min(Math.floor(sweepAz), N_AZ);     // 转到第几个方向（整数，数组下标）
+  const end = PC.azStart[azI];
+  const gr = only ? (small ? 2.2 : 2.8) : (small ? 1.1 : 1.4), orr = small ? 1.8 : 2.4;
+  ctx.fillStyle = only ? C.ink : C.groundpt;
+  for (let i = 0; i < end; i++) {
+    if (PC.lab[i] >= 0 || (only && PC.ch[i] !== sel)) continue;
+    ctx.fillRect(X(PC.xs[i]) - gr / 2, Y(PC.ys[i]) - gr / 2, gr, gr);
+  }
+  for (let i = 0; i < end; i++) {
+    const l = PC.lab[i];
+    if (l < 0 || (only && PC.ch[i] !== sel)) continue;
+    ctx.fillStyle = C.o[l];
+    ctx.fillRect(X(PC.xs[i]) - orr / 2, Y(PC.ys[i]) - orr / 2, orr, orr);
+  }
+  // box outlines + names
+  ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+  ctx.font = `${small ? 10 : 12}px ${C.body}`; ctx.textBaseline = "middle"; ctx.textAlign = "center";
+  SCENE.forEach((b, k) => {
+    const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), hx = b.L / 2, hy = b.W / 2;
+    const pts = [[hx, hy], [-hx, hy], [-hx, -hy], [hx, -hy]].map(([x, y]) => [b.cx + c * x - sn * y, b.cy + sn * x + c * y]);
+    ctx.strokeStyle = C.o[k];
+    ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))); ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = C.o[k];
+    const ly = b.cy + (b.cy >= 0 ? b.W / 2 + 1.3 : -b.W / 2 - 1.3);
+    ctx.fillText(b.zh, X(b.cx), Y(ly));
+  });
+  ctx.setLineDash([]);
+  // my car + lidar
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 1.2;
+  ctx.strokeRect(X(-2.3), Y(0.95), 4.6 * s, 1.9 * s);
+  ctx.fillStyle = C.ink;
+  ctx.beginPath(); ctx.arc(X(0), Y(0), 3, 0, 2 * Math.PI); ctx.fill();
+  ctx.fillText("我", X(0), Y(-2.3));
+  // sweep line
+  if (sweepAz < N_AZ) {
+    const a = sweepAz * 0.4 * Math.PI / 180;
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(60 * Math.cos(a)), Y(60 * Math.sin(a))); ctx.stroke();
+  } else {
+    ctx.font = `600 ${small ? 11 : 13}px ${C.body}`; ctx.fillStyle = C.ink;
+    ctx.fillText("影子", X(27.5), Y(0));
+    ctx.font = `${small ? 10 : 11.5}px ${C.body}`; ctx.fillStyle = C.muted;
+    if (!small) ctx.fillText("（我这条车道里，前车背后一个地面点都没有）", X(27.5), Y(-1.6));
+  }
+  // axis hint + scale bar
+  ctx.font = `${small ? 10 : 11.5}px ${C.num}`; ctx.fillStyle = C.muted; ctx.textAlign = "left";
+  ctx.fillText("x 往前 →", X(32), Y(-16.5));
+  ctx.fillText("↑ y 往左", X(-24), Y(16.5));
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(X(-24), Y(-16.5)); ctx.lineTo(X(-14), Y(-16.5)); ctx.stroke();
+  ctx.fillText("10 米", X(-24), Y(-15.3));
+
+  // stats
+  const shown = azI;
+  let g = 0, cnt = 0;
+  for (let i = 0; i < end; i++) { if (only && PC.ch[i] !== sel) continue; cnt++; if (PC.lab[i] < 0) g++; }
+  const deg = shown >= N_AZ ? 360 : shown * 0.4;
+  $("stats").innerHTML =
+    `<span>转了 <span class="num">${fmt(deg)}</span>°</span>` +
+    (only ? `<span>第 ${sel + 1} 根打了 <span class="num">${shown}</span> 次</span>`
+          : `<span>打出 <span class="num">${(shown * N_CH).toLocaleString("en-US")}</span> 根激光</span>`) +
+    `<span>回来 <span class="num">${cnt.toLocaleString("en-US")}</span> 个点（地面 <span class="num">${g.toLocaleString("en-US")}</span>，东西 <span class="num">${(cnt - g).toLocaleString("en-US")}</span>）</span>` +
+    (shown >= N_AZ ? `<span>车道里：前车前面 <span class="num">${counts.laneBefore}</span> 个，背后 <span class="num">${counts.laneAfter}</span> 个（你跑出来是 892 / 0，差的 2 个来自另抽的噪声）</span>` : "");
+}
+
+function tick(t) {
+  if (!playing) return;
+  const secPerTurn = +$("speed").value;
+  const dt = lastT ? (t - lastT) / 1000 : 0;
+  lastT = t;
+  sweepAz += dt / secPerTurn * N_AZ;
+  if (sweepAz >= N_AZ) { sweepAz = N_AZ; playing = false; $("play").textContent = "▶ 慢放一圈"; }
+  drawTop();
+  if (playing) requestAnimationFrame(tick);
+}
+$("play").addEventListener("click", () => {
+  if (playing) { playing = false; $("play").textContent = "▶ 继续"; return; }
+  if (sweepAz >= N_AZ) sweepAz = 0;
+  playing = true; lastT = 0; $("play").textContent = "⏸ 暂停";
+  requestAnimationFrame(tick);
+});
+$("full").addEventListener("click", () => { playing = false; sweepAz = N_AZ; $("play").textContent = "▶ 慢放一圈"; drawTop(); });
+$("onlyBeam").addEventListener("change", drawTop);
+$("beam").addEventListener("input", () => { drawSide(); if ($("onlyBeam").checked) drawTop(); });
+$("carOn").addEventListener("change", drawSide);
+$("onlySide").addEventListener("change", drawSide);
+document.querySelectorAll("[data-beam]").forEach((btn) => btn.addEventListener("click", () => {
+  $("beam").value = btn.dataset.beam; drawSide(); if ($("onlyBeam").checked) drawTop();
+}));
+
+// ===== where the points went =====
+function drawBar() {
+  const bar = $("bar"), key = $("barKey");
+  const parts = [{ n: counts.ground, color: "var(--groundpt)", name: "地面" }]
+    .concat(SCENE.map((b, k) => ({ n: counts.obj[k], color: `var(--o${k})`, name: b.zh })));
+  bar.innerHTML = parts.map(p => `<div style="width:${(100 * p.n / N).toFixed(3)}%;background:${p.color}" title="${p.name} ${p.n}"></div>`).join("");
+  key.innerHTML = parts.map(p => `<span><i class="sw" style="background:${p.color}"></i>${p.name} <span class="num">${p.n}</span></span>`).join("");
+  $("takeaway").innerHTML = `一圈 <span class="num">${N.toLocaleString("en-US")}</span> 个点里，地面占 <span class="num">${(100 * counts.ground / N).toFixed(1)}%</span>，5 个东西加起来只有 <span class="num">${nObj}</span> 个点。要找车，第一步就是把地面点去掉：下一步你要敲的 <code>remove_ground</code>。`;
+  $("topKey").innerHTML = `<span><i class="sw" style="background:var(--groundpt)"></i>地面点</span>` +
+    SCENE.map((b, k) => `<span><i class="sw" style="background:var(--o${k})"></i>${b.zh}</span>`).join("") +
+    `<span><i class="sw" style="background:var(--lane)"></i>浅蓝条 = 我这条车道 |y| &lt; 0.9 米</span>`;
+}
+
+function drawAll() { drawSide(); drawTop(); }
+drawBar(); drawAll();
+let rT; window.addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(drawAll, 80); });
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll);
+</script>
+
+</body>
+</html>

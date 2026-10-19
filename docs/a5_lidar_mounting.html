@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>激光雷达装在哪</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: a 3D stage (drag to orbit) with preset tabs above it; the info card for the chosen layout sits beside the stage on wide screens and under it on phones. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --accent: #e0661b; --accent-ink: #ffffff; --sky: #f4f6f8; --ground: #e2e7ec; --grid: #cbd3db; --lane: #ffffff;
+  --car: #8fa3b8; --glass: #2c3a48; --tyre: #2a2f35; --blind: #c4471f; --cam: #1e66d6; --us: #14936a;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --accent: #ff8a3d; --accent-ink: #11161b; --sky: #141b22; --ground: #1d252e; --grid: #2c3741; --lane: #4a5663;
+    --car: #6f8499; --glass: #0d1318; --tyre: #0b0e11; --blind: #ff7a52; --cam: #62a6ff; --us: #3fd29a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --accent: #ff8a3d; --accent-ink: #11161b; --sky: #141b22; --ground: #1d252e; --grid: #2c3741; --lane: #4a5663;
+  --car: #6f8499; --glass: #0d1318; --tyre: #0b0e11; --blind: #ff7a52; --cam: #62a6ff; --us: #3fd29a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 17px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { margin-top: 4px; color: var(--muted); max-width: 72ch; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tabs button {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.main { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.stage { position: relative; background: var(--sky); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; touch-action: none; min-width: 0; }
+.stage canvas { display: block; width: 100%; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.lbl {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -130%); pointer-events: none; white-space: nowrap;
+  font-size: 12.5px; line-height: 1.35; background: var(--surface); color: var(--ink); border: 1px solid var(--accent);
+  border-radius: 6px; padding: 2px 7px; box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+}
+.lbl .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); }
+.lbl.plain { border-color: var(--line); color: var(--muted); }
+.stage.narrow .lbl .num { display: none; }
+.stage.narrow .lbl { font-size: 11.5px; padding: 1px 5px; }
+.hud { position: absolute; left: 10px; bottom: 8px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.fallback { padding: 40px 16px; color: var(--muted); text-align: center; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: 14px; margin: 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 14px; color: var(--muted); }
+.opts label { display: flex; gap: 6px; align-items: center; }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+.note { font-size: 14px; color: var(--muted); }
+.note b { color: var(--ink); }
+.tie { border-left: 3px solid var(--accent); padding-left: 10px; font-size: 14.5px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>激光雷达装在哪</h1>
+    <p class="lede">车是示意的：前 5 个按钮是一辆轿车（长 4.7 米、高 1.45 米），最后一个换成 SUV，都不是照着哪个品牌画的。点上面的按钮换一种装法；在车上按住拖动可以转着看，滚轮或两指可以放大缩小。橙色是激光雷达，蓝色是摄像头，绿色是超声波雷达；半透明的罩子是它能看到的范围。</p>
+  </header>
+
+  <div class="tabs" role="group" aria-label="装法">
+    <button type="button" data-p="roof360" aria-pressed="true">车顶正中，转一圈</button>
+    <button type="button" data-p="tower" aria-pressed="false">车顶前沿「瞭望塔」</button>
+    <button type="button" data-p="bumper" aria-pressed="false">前保险杠</button>
+    <button type="button" data-p="lamps" aria-pressed="false">两侧大灯下方</button>
+    <button type="button" data-p="ring" aria-pressed="false">一圈都装（Robotaxi / L3）</button>
+    <button type="button" data-p="vision" aria-pressed="false">纯视觉：MONA L03 的配置</button>
+  </div>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="hud" id="hud">拖动旋转 · 滚轮缩放 · 地上每格 1 米</div>
+    </div>
+    <div class="panel" aria-live="polite">
+      <h2 id="pTitle"></h2>
+      <dl class="facts" id="pFacts"></dl>
+      <div class="opts">
+        <label for="showFov"><input id="showFov" type="checkbox" checked> 显示看得到的范围</label>
+        <label for="showBeams"><input id="showBeams" type="checkbox" checked> 显示转圈的激光</label>
+      </div>
+      <p class="tie" id="pTie"></p>
+      <p class="note"><b>特斯拉 Model 3：一颗激光雷达都没有。</b>特斯拉走纯摄像头路线（叫 Tesla Vision），2021 年起连毫米波雷达也拿掉了。</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const stage = document.getElementById("stage");
+  const $ = (id) => document.getElementById(id);
+  const tok = () => {
+    const s = getComputedStyle(document.documentElement);
+    const g = (n) => s.getPropertyValue(n).trim();
+    return { sky: g("--sky"), ground: g("--ground"), grid: g("--grid"), lane: g("--lane"), car: g("--car"), glass: g("--glass"),
+             tyre: g("--tyre"), accent: g("--accent"), blind: g("--blind"), muted: g("--muted"), cam: g("--cam"), us: g("--us") };
+  };
+
+  // ---- 12 ultrasonic sensors: 6 in the front bumper, 6 in the rear bumper
+  const US12 = [];
+  [-0.8, -0.48, -0.16, 0.16, 0.48, 0.8].forEach((lat, i) => {
+    US12.push({ type: "us", name: i === 5 ? "超声波 ×12" : "", sub: "前后保险杠各 6", x: 2.31, lat, h: 0.5, yaw: lat * 40, fov: { h: 70, up: 15, down: 25, r: 1.0 } });
+    US12.push({ type: "us", name: "", x: -2.31, lat, h: 0.5, yaw: 180 - lat * 40, fov: { h: 70, up: 15, down: 25, r: 1.0 } });
+  });
+
+  // ---- presets: positions in car coordinates (x forward from car centre, left = +lat, h = height above ground), yaw in degrees (left +)
+  const D2R = Math.PI / 180;
+  const PRESETS = {
+    roof360: {
+      title: "车顶正中，转一圈",
+      facts: [["谁这样装", "我们的假雷达、CARLA 默认的激光雷达、早期的 Robotaxi"],
+              ["装在哪", "车顶正中，架高到离地 1.8 米"],
+              ["看到什么", "水平一整圈 360°；竖直从向上 10° 到向下 30°"],
+              ["好处", "一个雷达就把四周看全"],
+              ["毛病", "凸在车顶，难看、风阻大；往下最多 30°，车身周围 3.1 米以内的地面看不到（红圈）"]],
+      tie: "和今天的影子有关：装在 1.8 米高，只比前车车顶高 0.3 米，所以从车顶上飞过去的激光要 104 米外才落地。",
+      cam: { r: 15, az: 35, el: 30 },
+      lidars: [{ name: "车顶正中", x: -0.3, lat: 0, h: 1.8, yaw: 0, fov: { h: 360, up: 10, down: 30, r: 6 }, mast: true, spin: true }],
+    },
+    tower: {
+      title: "车顶前沿「瞭望塔」",
+      facts: [["谁这样装", "国内量产车最常见，比如理想 L9、蔚来 ET7"],
+              ["装在哪", "车顶前沿正中，挡风玻璃上方，离地约 1.5 米"],
+              ["看到什么", "只看前方，水平大约 120°，竖直二十几度；看得远"],
+              ["好处", "位置高，越过前车看得更远；朝前看路最重要"],
+              ["毛病", "侧面和后面看不见，交给摄像头和毫米波雷达"]],
+      tie: "离地 1.5 米，比车顶正中那种低一点：看前车背后的路，比 1.8 米的更难。",
+      cam: { r: 9, az: 30, el: 22 },
+      lidars: [{ name: "瞭望塔", x: 0.22, lat: 0, h: 1.52, yaw: 0, fov: { h: 120, up: 12, down: 13, r: 7 }, bump: true }],
+    },
+    bumper: {
+      title: "前保险杠中间",
+      facts: [["谁这样装", "奔驰 EQS（法雷奥 SCALA）、奥迪 A8"],
+              ["装在哪", "车头保险杠正中，离地约 0.5 米"],
+              ["看到什么", "只看前方，水平大约 120°"],
+              ["好处", "藏在车身里，好看"],
+              ["毛病", "位置低：前车一挡，后面全看不见；离地近，怕脏、怕剐蹭"]],
+      tie: "离地只有 0.5 米，比前车车顶（1.5 米）还低：前车背后的路它一点都看不到。",
+      cam: { r: 8, az: 28, el: 14 },
+      lidars: [{ name: "前保险杠", x: 2.36, lat: 0, h: 0.52, yaw: 0, fov: { h: 120, up: 12, down: 13, r: 6 } }],
+    },
+    lamps: {
+      title: "两侧大灯下方",
+      facts: [["谁这样装", "小鹏早期带激光雷达的车型：P5（2021 年，小鹏第一款）、P7i、G6、G9、X9。2024 年起的新车型（MONA M03、P7+，2026 年 7 月上市的 MONA L03）都是纯视觉，小鹏叫“AI 鹰眼”"],
+              ["装在哪", "车头两侧、大灯下方各一颗，离地约 0.6 米，稍微朝外"],
+              ["看到什么", "两颗各看一边，合起来前方更宽"],
+              ["好处", "藏得好；车头两角也看得到"],
+              ["毛病", "位置低，和保险杠一样容易被前车挡住；要两颗，贵一些"]],
+      tie: "两颗都在 0.6 米高左右，比前车车顶低：前车更远那一边的路同样是影子。",
+      cam: { r: 8, az: 24, el: 18 },
+      lidars: [{ name: "左大灯下方", x: 2.24, lat: 0.7, h: 0.6, yaw: 20, fov: { h: 120, up: 12, down: 13, r: 5.5 } },
+               { name: "右大灯下方", x: 2.24, lat: -0.7, h: 0.6, yaw: -20, fov: { h: 120, up: 12, down: 13, r: 5.5 } }],
+    },
+    ring: {
+      title: "一圈都装（Robotaxi / L3）",
+      facts: [["谁这样装", "Robotaxi：Waymo 第 6 代用 4 个激光雷达，加 13 个摄像头、6 个毫米波雷达；L3 量产车方案一般 3～6 颗"],
+              ["装在哪", "车顶一个转圈的主雷达看远处；车身四角各一个“补盲”雷达看车边"],
+              ["看到什么", "主雷达看一整圈、看得远；补盲雷达视野很宽，只看近处几米到几十米"],
+              ["好处", "几乎没有死角：车边的行人、路沿也看得到"],
+              ["毛病", "贵；要把好几个雷达的点拼到同一个坐标里（标定）"]],
+      tie: "补盲雷达正好补上车顶主雷达脚下那一圈看不见的地方（红圈）。车边的行人、路沿，主雷达看不到，补盲雷达看得到。",
+      cam: { r: 12, az: 40, el: 32 },
+      lidars: [{ name: "车顶主雷达", x: -0.3, lat: 0, h: 1.95, yaw: 0, fov: { h: 360, up: 10, down: 30, r: 6 }, mast: true },
+               { name: "左前角", noSub: true, x: 2.2, lat: 0.82, h: 0.6, yaw: 45, fov: { h: 150, up: 35, down: 35, r: 2.6 } },
+               { name: "右前角", noSub: true, x: 2.2, lat: -0.82, h: 0.6, yaw: -45, fov: { h: 150, up: 35, down: 35, r: 2.6 } },
+               { name: "左后角", noSub: true, x: -2.2, lat: 0.82, h: 0.6, yaw: 135, fov: { h: 150, up: 35, down: 35, r: 2.6 } },
+               { name: "右后角", noSub: true, x: -2.2, lat: -0.82, h: 0.6, yaw: -135, fov: { h: 150, up: 35, down: 35, r: 2.6 } }],
+    },
+    vision: {
+      title: "纯视觉：MONA L03 的配置",
+      body: "suv",
+      facts: [["车身", "通用 SUV 外形，没有照着 L03 的样子画；尺寸按官方配置表：长 4650、宽 1920、高 1600 毫米，轴距 2850"],
+              ["激光雷达", "0 颗"],
+              ["Plus 版", "1 个辅助驾驶摄像头 + 4 个 360 环视摄像头 + 12 个超声波雷达；配置表里没有图灵智驾芯片"],
+              ["Max 版", "7 个辅助驾驶摄像头 + 4 个环视 = 11 个摄像头，12 个超声波雷达；1 颗图灵芯片，750 TOPS"],
+              ["Ultra SE 版", "摄像头和 Max 一样；2 颗图灵芯片，1500 TOPS"],
+              ["毫米波雷达", "配置表里没写清楚几个，图上没画"],
+              ["图上的位置", "按 Max 版的 11 个摄像头画。官方只给了总数，7 个辅助驾驶摄像头按常见做法摆（前视 2、侧视 4、后视 1），是示意"]],
+      tie: "没有激光雷达，就没有“每个点自带距离”。前车有多远、在哪，要从照片里算出来，这正是以后学的 BEV 要解决的问题。",
+      cam: { r: 10, az: 212, el: 36 },
+      lidars: [
+        { type: "cam", name: "前视 ×2", sub: "挡风玻璃上方", x: 0.25, lat: 0.07, h: 1.47, yaw: 0, fov: { h: 50, up: 12, down: 15, r: 8 } },
+        { type: "cam", name: "", x: 0.25, lat: -0.07, h: 1.47, yaw: 0, fov: { h: 120, up: 20, down: 25, r: 4 } },
+        { type: "cam", name: "侧视（翼子板，朝后看）", x: 1.35, lat: 0.97, h: 0.98, yaw: 150, fov: { h: 90, up: 15, down: 25, r: 4 } },
+        { type: "cam", name: "", x: 1.35, lat: -0.97, h: 0.98, yaw: -150, fov: { h: 90, up: 15, down: 25, r: 4 } },
+        { type: "cam", name: "侧视（B 柱，朝前看）", x: -0.15, lat: 0.92, h: 1.2, yaw: 65, fov: { h: 90, up: 15, down: 25, r: 4 } },
+        { type: "cam", name: "", x: -0.15, lat: -0.92, h: 1.2, yaw: -65, fov: { h: 90, up: 15, down: 25, r: 4 } },
+        { type: "cam", name: "后视", x: -2.33, lat: 0, h: 1.12, yaw: 180, fov: { h: 60, up: 12, down: 18, r: 5 } },
+        { type: "cam", name: "环视 ×4", sub: "车头、两个后视镜下、车尾", x: 0.85, lat: 1.08, h: 1.06, yaw: 90, fov: { h: 180, up: 5, down: 75, r: 2 } },
+        { type: "cam", name: "", x: 0.85, lat: -1.08, h: 1.06, yaw: -90, fov: { h: 180, up: 5, down: 75, r: 2 } },
+        { type: "cam", name: "", x: 2.35, lat: 0, h: 0.66, yaw: 0, fov: { h: 180, up: 5, down: 75, r: 2 } },
+        { type: "cam", name: "", x: -2.35, lat: 0, h: 1.0, yaw: 180, fov: { h: 180, up: 5, down: 75, r: 2 } },
+      ].concat(US12),
+    },
+  };
+
+  if (!window.THREE) { stage.insertAdjacentHTML("afterbegin", '<p class="fallback">3D 库没有加载出来，刷新一下页面试试。</p>'); return; }
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+  catch (e) { stage.insertAdjacentHTML("afterbegin", '<p class="fallback">这个浏览器不支持 3D（WebGL），换一个浏览器打开试试。</p>'); return; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  stage.insertBefore(renderer.domElement, stage.firstChild);
+  renderer.domElement.setAttribute("aria-label", "三维示意：一辆车和它身上的激光雷达、摄像头");
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1.6, 0.1, 400);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x888888, 0.75); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(6, 10, 4); scene.add(sun);
+
+  // world: x forward, y up, z right (so "left" = -z)
+  const P = (x, lat, h) => new THREE.Vector3(x, h, -lat);
+
+  // ---- ground, grid, lane lines
+  const groundMat = new THREE.MeshLambertMaterial();
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), groundMat);
+  ground.rotation.x = -Math.PI / 2; scene.add(ground);
+  let grid = null;
+  const laneMat = new THREE.LineBasicMaterial();
+  [1.75, -1.75].forEach((lat) => {
+    const g = new THREE.BufferGeometry().setFromPoints([P(-40, lat, 0.012), P(60, lat, 0.012)]);
+    scene.add(new THREE.Line(g, laneMat));
+  });
+
+  // ---- generic sedan (side profile extruded across the width)
+  const carGroup = new THREE.Group(); scene.add(carGroup);
+  const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.15 });
+  const glassMat = new THREE.MeshStandardMaterial({ roughness: 0.25, metalness: 0.3 });
+  const tyreMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+  function extrude(pts, width, mat, grp = carGroup) {
+    const s = new THREE.Shape(); pts.forEach(([x, y], i) => i ? s.lineTo(x, y) : s.moveTo(x, y)); s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, { depth: width, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2 });
+    g.translate(0, 0, -width / 2);
+    const m = new THREE.Mesh(g, mat); grp.add(m); return m;
+  }
+  extrude([[2.3, 0.28], [2.38, 0.6], [2.18, 0.8], [0.95, 0.97], [-1.8, 1.01], [-2.3, 0.97], [-2.38, 0.6], [-2.3, 0.28]], 1.77, bodyMat);
+  extrude([[0.95, 0.97], [0.25, 1.4], [-0.9, 1.42], [-1.8, 1.01]], 1.5, glassMat);
+  [[1.45, 0.82], [1.45, -0.82], [-1.45, 0.82], [-1.45, -0.82]].forEach(([x, lat]) => {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.24, 28), tyreMat);
+    w.rotation.x = Math.PI / 2; w.position.copy(P(x, lat, 0.34)); carGroup.add(w);
+  });
+  // generic compact SUV, 4.65 × 1.92 × 1.60 m, wheelbase 2.85 m (not modelled on any brand's design)
+  const suvGroup = new THREE.Group(); scene.add(suvGroup);
+  extrude([[2.27, 0.3], [2.34, 0.7], [2.12, 0.92], [0.95, 1.05], [-2.12, 1.1], [-2.34, 1.0], [-2.34, 0.62], [-2.25, 0.3]], 1.84, bodyMat, suvGroup);
+  extrude([[0.95, 1.05], [0.18, 1.52], [-1.85, 1.53], [-2.15, 1.1]], 1.6, glassMat, suvGroup);
+  [[1.475, 0.84], [1.475, -0.84], [-1.375, 0.84], [-1.375, -0.84]].forEach(([x, lat]) => {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.25, 28), tyreMat);
+    w.rotation.x = Math.PI / 2; w.position.copy(P(x, lat, 0.36)); suvGroup.add(w);
+  });
+
+  // ---- lidar layer (rebuilt per preset)
+  let layer = new THREE.Group(); scene.add(layer);
+  let spinner = null, labels = [], blindDisc = null;
+  const lidarMat = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.1 });
+  const fovMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false });
+  const edgeMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.65 });
+  const beamMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.9 });
+  const ringMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.45 });
+  const blindMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false });
+  const camMat = new THREE.MeshStandardMaterial({ roughness: 0.35 }), usMat = new THREE.MeshStandardMaterial({ roughness: 0.4 });
+  const fovCamMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false });
+  const fovUsMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false });
+  const edgeCamMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.28 }), edgeUsMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.5 });
+  const MATS = { lidar: [fovMat, edgeMat], cam: [fovCamMat, edgeCamMat], us: [fovUsMat, edgeUsMat] };
+
+  function dirAt(az, el) { return new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)); }
+
+  function makeFov(f, type = "lidar") {
+    const [fm, em] = MATS[type];
+    const g = new THREE.Group();
+    const full = f.h >= 360;
+    const h = f.h * D2R, up = f.up * D2R, dn = f.down * D2R;
+    const patch = new THREE.Mesh(new THREE.SphereGeometry(f.r, full ? 64 : 32, 10,
+      full ? 0 : Math.PI - h / 2, full ? 2 * Math.PI : h, Math.PI / 2 - up, up + dn), fm);
+    g.add(patch);
+    if (!full && type !== "us") {
+      const pts = [];
+      [[-h / 2, up], [h / 2, up], [-h / 2, -dn], [h / 2, -dn]].forEach(([a, e]) => { pts.push(new THREE.Vector3(0, 0, 0), dirAt(a, e).multiplyScalar(f.r)); });
+      g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), em));
+    }
+    return g;
+  }
+
+  function addLabel(text, sub, pos, plain) {
+    const el = document.createElement("div");
+    el.className = "lbl" + (plain ? " plain" : "");
+    el.innerHTML = sub ? `${text} <span class="num">${sub}</span>` : text;   // the number hides on narrow screens
+    stage.appendChild(el);
+    labels.push({ el, pos });
+  }
+
+  function build(key) {
+    scene.remove(layer); layer = new THREE.Group(); scene.add(layer);
+    labels.forEach((l) => l.el.remove()); labels = []; spinner = null; blindDisc = null;
+    const pr = PRESETS[key];
+    pr.lidars.forEach((L) => {
+      const o = P(L.x, L.lat, L.h);
+      const unit = new THREE.Group(); unit.position.copy(o); unit.rotation.y = L.yaw * D2R; layer.add(unit);
+      const type = L.type || "lidar";
+      if (type !== "lidar") {
+        const m = type === "cam" ? new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.06, 0.07), camMat) : new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), usMat);
+        unit.add(m);
+        const fv = makeFov(L.fov, type); fv.userData.isFov = true; unit.add(fv);
+        if (L.name) addLabel(L.name, L.sub || "", o.clone().add(new THREE.Vector3(0, 0.08, 0)));
+        return;
+      }
+      const puck = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, 0.12, 24), lidarMat);
+      if (L.mast) {
+        const roofH = 1.42, len = L.h - 0.06 - roofH;
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, len, 10), tyreMat);
+        mast.position.copy(P(L.x, L.lat, roofH + len / 2)); layer.add(mast);
+      }
+      if (L.bump) {
+        const bump = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.42), bodyMat);
+        bump.position.copy(P(L.x, L.lat, L.h - 0.07)); layer.add(bump);
+        puck.scale.set(1.1, 0.8, 1.4);
+      }
+      unit.add(puck);
+      const fov = makeFov(L.fov); fov.userData.isFov = true; unit.add(fov);
+      addLabel(L.name, L.noSub ? "" : `离地 ${L.h.toFixed(2)} 米`, o.clone().add(new THREE.Vector3(0, 0.12, 0)));
+
+      if (L.fov.h >= 360) {   // blind circle on the ground around the car
+        const rBlind = L.h / Math.tan(L.fov.down * D2R);
+        blindDisc = new THREE.Mesh(new THREE.RingGeometry(0.01, rBlind, 64), blindMat);
+        blindDisc.rotation.x = -Math.PI / 2; blindDisc.position.copy(P(L.x, L.lat, 0.02)); layer.add(blindDisc);
+        addLabel("看不见的圈", `半径 ${rBlind.toFixed(1)} 米`, P(L.x + 0.2, L.lat - rBlind * 0.72, 0.05), true);
+      }
+      if (L.spin) {           // 32 beams, +10° .. −30°, spinning; rings where the downward ones land
+        const segs = [];
+        for (let i = 0; i < 32; i++) {
+          const e = (10 - 40 * i / 31) * D2R;
+          const len = e < 0 ? Math.min(L.h / Math.tan(-e), 40) / Math.cos(e) : 4;
+          segs.push(new THREE.Vector3(0, 0, 0), dirAt(0, e).multiplyScalar(len));
+          if (e < 0) {
+            const d = L.h / Math.tan(-e);
+            if (d < 40) {
+              const ring = []; for (let k = 0; k <= 96; k++) { const a = 2 * Math.PI * k / 96; ring.push(P(L.x + d * Math.cos(a), L.lat + d * Math.sin(a), 0.015)); }
+              const rl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), ringMat); rl.userData.isBeam = true; layer.add(rl);
+            }
+          }
+        }
+        spinner = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(segs), beamMat);
+        spinner.position.copy(o); spinner.userData.isBeam = true; layer.add(spinner);
+      }
+    });
+    carGroup.visible = pr.body !== "suv"; suvGroup.visible = pr.body === "suv";
+    $("pTitle").textContent = pr.title;
+    $("pFacts").innerHTML = pr.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+    $("pTie").textContent = pr.tie;
+    $("showBeams").parentElement.hidden = !pr.lidars.some((L) => L.spin);
+    cam.r = pr.cam.r; cam.az = pr.cam.az; cam.el = pr.cam.el;
+    applyVisibility(); applyTheme();
+  }
+
+  function applyVisibility() {
+    const fovOn = $("showFov").checked, beamsOn = $("showBeams").checked;
+    layer.traverse((o) => { if (o.userData.isFov) o.visible = fovOn; if (o.userData.isBeam) o.visible = beamsOn; });
+  }
+
+  function applyTheme() {
+    const t = tok();
+    scene.background = new THREE.Color(t.sky);
+    groundMat.color.set(t.ground); laneMat.color.set(t.lane);
+    bodyMat.color.set(t.car); glassMat.color.set(t.glass); tyreMat.color.set(t.tyre);
+    lidarMat.color.set(t.accent); lidarMat.emissive = new THREE.Color(t.accent); lidarMat.emissiveIntensity = 0.35;
+    fovMat.color.set(t.accent); edgeMat.color.set(t.accent); beamMat.color.set(t.accent); ringMat.color.set(t.accent);
+    blindMat.color.set(t.blind);
+    camMat.color.set(t.cam); fovCamMat.color.set(t.cam); edgeCamMat.color.set(t.cam);
+    usMat.color.set(t.us); fovUsMat.color.set(t.us); edgeUsMat.color.set(t.us);
+    if (grid) scene.remove(grid);
+    grid = new THREE.GridHelper(60, 60, new THREE.Color(t.grid), new THREE.Color(t.grid));
+    grid.position.y = 0.005; scene.add(grid);
+  }
+
+  // ---- camera orbit (drag / wheel / pinch)
+  const cam = { r: 15, az: 35, el: 30 };
+  const target = new THREE.Vector3(0.3, 0.7, 0);
+  const pointers = new Map(); let pinch0 = 0, r0 = 0, userMoved = false;
+  const cv = renderer.domElement;
+  cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); userMoved = true;
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); r0 = cam.r; } });
+  cv.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) { cam.az -= (e.clientX - prev.x) * 0.35; cam.el = Math.max(3, Math.min(85, cam.el + (e.clientY - prev.y) * 0.3)); }
+    else if (pointers.size === 2 && pinch0) { const [a, b] = [...pointers.values()]; cam.r = Math.max(3.5, Math.min(40, r0 * pinch0 / Math.hypot(a.x - b.x, a.y - b.y))); }
+  });
+  const up = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch0 = 0; };
+  cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+  cv.addEventListener("wheel", (e) => { e.preventDefault(); cam.r = Math.max(3.5, Math.min(40, cam.r * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+
+  function resize() {
+    const w = stage.clientWidth, h = Math.max(320, Math.min(560, Math.round(w * 0.66)));
+    stage.classList.toggle("narrow", w < 600);
+    renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let last = 0;
+  function frame(t) {
+    const dt = last ? (t - last) / 1000 : 0; last = t;
+    if (spinner && !reduce) spinner.rotation.y += dt * (2 * Math.PI / 6);   // one turn every 6 s (real lidars: 10 turns a second)
+    const az = cam.az * D2R, el = cam.el * D2R;
+    camera.position.set(target.x - cam.r * Math.cos(el) * Math.cos(az), target.y + cam.r * Math.sin(el), target.z + cam.r * Math.cos(el) * Math.sin(az));
+    camera.lookAt(target);
+    renderer.render(scene, camera);
+    const w = cv.clientWidth, h = cv.clientHeight;
+    labels.forEach(({ el, pos }) => {
+      const v = pos.clone().project(camera);
+      const vis = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      el.style.display = vis ? "" : "none";
+      if (vis) el.style.transform = `translate(${(v.x + 1) / 2 * w}px, ${(1 - v.y) / 2 * h}px) translate(-50%, -130%)`;
+    });
+    requestAnimationFrame(frame);
+  }
+
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    build(b.dataset.p);
+  }));
+  $("showFov").addEventListener("change", applyVisibility);
+  $("showBeams").addEventListener("change", applyVisibility);
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  resize(); build("roof360"); requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
