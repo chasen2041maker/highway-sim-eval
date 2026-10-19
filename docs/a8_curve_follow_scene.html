@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>弯道跟车：两种开法</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one top-view figure of the scene (true scale), then the two driving pipelines side by side, then the question card. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3;
+  --asphalt: #dde2e7; --edge: #ffffff; --nail: #d23b3b; --ego: #1e66d6; --ego-soft: #e3edfb;
+  --lead: #6b7682; --brake: #c4471f; --chip: #f5f7f9;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e;
+    --asphalt: #26303a; --edge: #cfd6dd; --nail: #ff6b6b; --ego: #62a6ff; --ego-soft: #1b2c44;
+    --lead: #a7b1bc; --brake: #ff8a5c; --chip: #1f2832; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e;
+  --asphalt: #26303a; --edge: #cfd6dd; --nail: #ff6b6b; --ego: #62a6ff; --ego-soft: #1b2c44;
+  --lead: #a7b1bc; --brake: #ff8a5c; --chip: #1f2832; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 17px; margin: 0 0 8px; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 72ch; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.scene { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .scene { grid-template-columns: minmax(0, 1fr); } }
+svg { display: block; width: 100%; height: auto; }
+.facts { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.facts b { font-family: var(--font-num); }
+.pipes { display: grid; gap: 14px; }
+.pipe { display: grid; gap: 6px; }
+.pipe-name { font-weight: 700; }
+.flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.box { border: 1px solid var(--line); background: var(--chip); border-radius: 8px; padding: 6px 10px; font-size: 14px; min-width: 0; }
+.box.pid { border-color: var(--ego); background: var(--ego-soft); }
+.arrow { color: var(--muted); font-family: var(--font-num); }
+.note { margin: 0; color: var(--muted); font-size: 14px; }
+.note b { color: var(--ink); }
+.q { border: 2px solid var(--ego); }
+.q p { margin: 0 0 6px; }
+.choices { display: flex; gap: 10px; flex-wrap: wrap; font-weight: 700; }
+.choices span { border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; background: var(--chip); }
+.paper { fill: var(--surface); }
+.lane { fill: none; stroke: var(--asphalt); stroke-linejoin: round; }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+.dot { fill: var(--nail); }
+.car-ego { fill: var(--ego); }
+.car-lead { fill: var(--lead); }
+.car-ghost { fill: none; stroke: var(--brake); stroke-width: 2; stroke-dasharray: 4 3; }
+.lbl { font: 500 13px var(--font-body); fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.lbl.small { font-size: 12px; }
+.lbl.ego { fill: var(--ego); font-weight: 700; }
+.lbl.brake { fill: var(--brake); font-weight: 700; }
+.lbl.muted { fill: var(--muted); }
+.lead-line { stroke: var(--muted); stroke-width: 1; }
+.dim { stroke: var(--ink); stroke-width: 1.2; }
+.mk { fill: var(--ink); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>弯道跟车：两种开法</h1>
+    <p class="lede">④ 三样合起来开一段路的场景。图是从天上往下看，真实比例；蓝车是你的车，灰车是前车。</p>
+  </header>
+
+  <section class="panel scene" aria-label="场景">
+    <svg id="map" viewBox="0 0 600 470" aria-label="俯视：直道 40 米，然后半径 20 米左转 90 度，再直道；两车在直道上，前车在弯里刹停">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path class="mk" d="M0 0L10 5L0 10z"></path>
+        </marker>
+      </defs>
+      <rect class="paper" x="0" y="0" width="600" height="470"></rect>
+      <path id="lane" class="lane"></path>
+      <g id="dots"></g>
+      <g id="cars"></g>
+    </svg>
+    <div>
+      <h2>场景</h2>
+      <ol class="facts">
+        <li>路：直道 <b>40</b> 米 → 左转弯（半径 <b>20</b> 米，转 90°）→ 直道。中心线还是每 <b>0.5</b> 米一颗红点。</li>
+        <li>一开始两车都是 <b>10</b> m/s，车距 <b>25</b> 米。你的车想开到 <b>15</b>，所以一直想往前凑。</li>
+        <li>前车第 <b>3</b> 秒刚进弯就急刹（每秒减 <b>5</b>），<b>2</b> 秒后停在弯里（橙色虚线框）。</li>
+        <li>你的车要<b>同时</b>做三件事：Pure Pursuit 打方向沿着弯开、IDM 决定跟多近、刹车。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="两种开法">
+    <h2>同一个场景跑两遍，只有“加速度怎么到车上”不一样</h2>
+    <div class="pipes">
+      <div class="pipe">
+        <span class="pipe-name">第 1 遍：IDM 的加速度直接给车</span>
+        <div class="flow">
+          <span class="box">IDM：算出想要的加速度</span><span class="arrow">→</span>
+          <span class="box">车：照做，一点不差、一点不晚</span>
+        </div>
+      </div>
+      <div class="pipe">
+        <span class="pipe-name">第 2 遍：中间加 PID（和 CARLA 里一样）</span>
+        <div class="flow">
+          <span class="box">IDM：算出想要的加速度</span><span class="arrow">→</span>
+          <span class="box">影子车：车速完全听 IDM</span><span class="arrow">→</span>
+          <span class="box pid">PID：先看“影子车速 − 我的车速”差多少，再决定踩多少</span><span class="arrow">→</span>
+          <span class="box">车</span>
+        </div>
+      </div>
+      <p class="note"><b>要对照的事实：</b>PID 得先看到差距才动手。10-17 在 CARLA 里，IDM 要刹 −3.63 时，车实际只刹到 −3.32，比 IDM 想要的晚了大约半拍。</p>
+    </div>
+  </section>
+
+  <section class="panel q" aria-label="预测题">
+    <p><b>预测题：</b>第 1 遍跑完，两车最近的时候还剩 <b>4.96</b> 米。</p>
+    <p>第 2 遍（中间加了 PID），两车最近的时候，和 4.96 米比：</p>
+    <div class="choices"><span>① 变大</span><span>② 变小</span></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var S = 6.4, OX = 40, OY = 445;
+  var sx = function (x) { return OX + x * S; }, sy = function (y) { return OY - y * S; };
+  var NS = "http://www.w3.org/2000/svg";
+  function mk(tag, attrs, parent) {
+    var el = document.createElementNS(NS, tag);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    parent.appendChild(el); return el;
+  }
+  // path: straight 40 m, left arc R = 20 m for 90 deg, straight 40 m (same as make_path)
+  function at(s) {
+    if (s <= 40) return { x: s, y: 0, h: 0 };
+    var arc = 20 * Math.PI / 2;
+    if (s <= 40 + arc) { var th = (s - 40) / 20; return { x: 40 + 20 * Math.sin(th), y: 20 - 20 * Math.cos(th), h: th }; }
+    return { x: 60, y: 20 + (s - 40 - arc), h: Math.PI / 2 };
+  }
+  var total = 40 + 20 * Math.PI / 2 + 40, d = "";
+  for (var s = 0; s <= total + 0.01; s += 0.5) { var q = at(s); d += (s ? "L" : "M") + sx(q.x).toFixed(1) + " " + sy(q.y).toFixed(1); }
+  var lane = document.getElementById("lane");
+  lane.setAttribute("d", d); lane.setAttribute("stroke-width", (3.5 * S).toFixed(1));
+  var dots = document.getElementById("dots");
+  for (var s2 = 0; s2 <= total + 0.01; s2 += 0.5) { var p = at(s2); mk("circle", { "class": "dot", cx: sx(p.x).toFixed(1), cy: sy(p.y).toFixed(1), r: 0.9 }, dots); }
+
+  var cars = document.getElementById("cars");
+  function car(s, cls, label, lx, ly, lcls, anchor) {
+    var p = at(s), w = 4.7 * S, h = 1.9 * S;
+    mk("rect", { "class": cls, x: (-w / 2).toFixed(1), y: (-h / 2).toFixed(1), width: w.toFixed(1), height: h.toFixed(1), rx: 3,
+      transform: "translate(" + sx(p.x).toFixed(1) + " " + sy(p.y).toFixed(1) + ") rotate(" + (-p.h * 180 / Math.PI).toFixed(1) + ")" }, cars);
+    if (label) {
+      mk("line", { "class": "lead-line", x1: sx(p.x).toFixed(1), y1: sy(p.y).toFixed(1), x2: lx, y2: ly - 4 }, cars);
+      var t = mk("text", { "class": "lbl " + lcls, x: lx, y: ly, "text-anchor": anchor || "start" }, cars);
+      t.textContent = label;
+    }
+  }
+  car(0, "car-ego", "你的车 10 m/s（想开到 15）", 40, 372, "ego");
+  car(29.7, "car-lead", "前车 10 m/s", 200, 402, "");
+  car(59.7, "car-ghost", "第 3 秒：前车开始急刹", 470, 330, "brake", "start");
+  car(69.7, "car-ghost", "第 5 秒：前车停在这里", 470, 250, "brake", "start");
+  // gap dimension: ego front (2.35) to lead rear (27.35)
+  mk("line", { "class": "dim", x1: sx(2.35), y1: sy(0) + 24, x2: sx(27.35), y2: sy(0) + 24, "marker-start": "url(#ar)", "marker-end": "url(#ar)" }, cars);
+  mk("text", { "class": "lbl small", x: ((sx(2.35) + sx(27.35)) / 2).toFixed(1), y: sy(0) + 19, "text-anchor": "middle" }, cars).textContent = "车距 25 米";
+  mk("text", { "class": "lbl small muted", x: sx(20), y: sy(0) - 22, "text-anchor": "middle" }, cars).textContent = "直道 40 米";
+  mk("text", { "class": "lbl small muted", x: sx(42), y: sy(14), "text-anchor": "end" }, cars).textContent = "左转弯 半径 20 米";
+  mk("text", { "class": "lbl small muted", x: 12, y: 20 }, cars).textContent = "从天上往下看 · 车道宽 3.5 米 · 红点 = 中心线";
+})();
+</script>
+
+</body>
+</html>
