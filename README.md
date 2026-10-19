@@ -35,6 +35,7 @@
 | `sim/carla_client.py` | `CarlaSim`：同步模式、固定步长、自车与前车生成、异常安全的资源回收 | ✅ 完成 |
 | `ads/control.py` | PID 纵向控制（含防积分饱和）+ Pure Pursuit 横向控制 | ✅ 均已在 CARLA 验证 |
 | `ads/planning.py` | IDM 跟车（含接近速度项） | ✅ 已接入 CARLA（剧本前车急刹）；加速度经下层速度闭环（参考车速 + PID）执行 |
+| `evaluation/metrics.py` | 横向误差：车到车道中心线（路点折线）的点到线段距离，取代“到最近路点距离”（路点间距 0.5 米时后者有约 0.25 米误差） | ✅ 完成 + 测试；待接入 CARLA |
 | `sim/recorder.py` | 相机 / 激光雷达 / GNSS / IMU 录制，带帧号与仿真时间戳 | 📋 计划中 |
 | 感知 · 跟踪 · 规划 | RANSAC + DBSCAN、卡尔曼 + 匈牙利、Frenet 轨迹 | 📋 计划中 |
 | 评测平台 · 数据挖掘 · 闭环学习 | 见[路线图](#路线图) | 📋 计划中 |
