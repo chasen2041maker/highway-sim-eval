@@ -17,7 +17,7 @@ import math
 from pathlib import Path
 
 from ads.control import PID, find_lookahead_point, pure_pursuit_steer
-from ads.planning import idm_accel
+from ads.planning import StopHold, idm_accel
 from ads.vehicle import VehicleState, step
 from evaluation.metrics import lateral_error_m
 from examples.a3_pure_pursuit import make_path
@@ -34,6 +34,7 @@ LEAD_BRAKE_MPS2 = -5.0
 LOOKAHEAD_M = 5.0          # 10-16 在 CARLA 里选的 Ld
 MAX_ACCEL_MPS2 = 3.0       # 车最猛加速 3、最猛刹车 −8
 MAX_BRAKE_MPS2 = 8.0
+HOLD_DECEL_MPS2 = 2.0      # 停车保持时踩住刹车（模型里用 −2 m/s²；CARLA 里是刹车踏板 0.3～0.4）
 
 
 def point_at(path, s_m):
@@ -57,13 +58,14 @@ def record(log, **values):
         log.setdefault(key, []).append(value)
 
 
-def simulate(closed_loop: bool):
-    """跑一遍。closed_loop=True：IDM → 影子车 → PID → 加速度；False：IDM 的加速度直接给车。"""
+def simulate(closed_loop: bool, stop_hold: bool = False):
+    """跑一遍。closed_loop=True：IDM → 影子车 → PID → 加速度；False：IDM 的加速度直接给车。stop_hold=True：加停车保持。"""
     path = make_path(SPACING_M)
     ego = VehicleState(speed_mps=START_SPEED_MPS)
     lead_s_m, lead_speed_mps = START_GAP_M + CAR_LEN_M, START_SPEED_MPS   # 前车沿路线的位置（中心）、车速
     shadow_mps = START_SPEED_MPS                                          # 影子车车速
     pid = PID(kp=1.0, ki=0.5, u_max=MAX_ACCEL_MPS2)
+    hold = StopHold()
     log = {}
 
     for k in range(round(SIM_TIME_S / DT_S)):
@@ -79,6 +81,11 @@ def simulate(closed_loop: bool):
         else:
             accel = want
         accel = max(-MAX_BRAKE_MPS2, min(MAX_ACCEL_MPS2, accel))            #    车做不到的截掉
+
+        if stop_hold and hold.update(ego.speed_mps, lead_speed_mps, gap_m):
+            pid.integral, pid.pre_error, shadow_mps = 0.0, None, 0.0    # 攒的清掉，影子车也停
+            accel = -HOLD_DECEL_MPS2    #踩住刹车
+        
         tx, ty = find_lookahead_point(path, ego, LOOKAHEAD_M)               # ④ 横向控制：Pure Pursuit
         steer = pure_pursuit_steer(ego, tx, ty)
         error = lateral_error_m(path, ego.x_m, ego.y_m)                     # ⑤ 新尺子：离中心线多远
@@ -96,22 +103,30 @@ def summarize(log):
     gaps, errs, accels, ts = log["gap"], log["err"], log["accel"], log["t"]
     i_gap = gaps.index(min(gaps))
     i_err = errs.index(max(errs))
+    restarts, low = 0, False                  # 停下（< 1 m/s）后又起步（> 1 m/s）的次数
+    for v in log["speed"]:
+        if v < 1.0:
+            low = True
+        elif low:
+            restarts, low = restarts + 1, False
     return (f"最小车距 {gaps[i_gap]:.2f} 米（{ts[i_gap]:.1f} 秒）｜离中心最远 {errs[i_err]:.2f} 米（{ts[i_err]:.1f} 秒）、"
-            f"平均 {sum(errs) / len(errs):.3f}｜最猛刹车 {min(accels):.2f}｜{'撞了！' if min(gaps) <= 0 else '没撞'}")
+            f"平均 {sum(errs) / len(errs):.3f}｜最猛刹车 {min(accels):.2f}｜停下后又起步 {restarts} 次｜最后停在 {gaps[-1]:.2f} 米｜"
+            f"{'撞了！' if min(gaps) <= 0 else '没撞'}")
 
 
 def main():
     results = {}
-    for closed_loop, name in ((False, "IDM 加速度直接给车"), (True, "IDM → 影子车 → PID")):
-        path, log = simulate(closed_loop)
+    for closed_loop, hold, name in ((False, False, "IDM 加速度直接给车"), (True, False, "IDM → 影子车 → PID"),
+                                    (True, True, "PID + 停车保持")):
+        path, log = simulate(closed_loop, hold)
         results[name] = log
         print(f"{name}：{summarize(log)}")
     plot(path, results)
 
 
 # ---------- 以下是画图，助手写好的，不用手敲 ----------
-COLORS = {"IDM 加速度直接给车": "#9a9a94", "IDM → 影子车 → PID": "#2a78d6"}
-LABELS = {"IDM 加速度直接给车": "IDM accel -> car", "IDM → 影子车 → PID": "IDM -> shadow -> PID"}
+COLORS = {"IDM 加速度直接给车": "#9a9a94", "IDM → 影子车 → PID": "#2a78d6", "PID + 停车保持": "#1baf7a"}
+LABELS = {"IDM 加速度直接给车": "IDM accel -> car", "IDM → 影子车 → PID": "IDM -> shadow -> PID", "PID + 停车保持": "PID + stop hold"}
 
 
 def plot(path, results):
