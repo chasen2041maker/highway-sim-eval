@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>前车框为什么偏</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: two stacked figure panels (side view, then an adjustable top view), each with a one-line caption of the real numbers. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --accent: #1e66d6; --accent-ink: #ffffff; --grid: #e6eaee; --axis: #b9c2cc;
+  --hit: #1e66d6; --roof: #1a9a6c; --pass: #8a96a3; --warn: #d23b3b; --car: #d7dde4; --ego: #c9d0d8; --groundc: #8d7b62;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --accent: #62a6ff; --accent-ink: #11161b; --grid: #222b34; --axis: #3a4652;
+    --hit: #62a6ff; --roof: #3fd29a; --pass: #7d8894; --warn: #ff6b6b; --car: #2c3742; --ego: #34404c; --groundc: #b9a587; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --accent: #62a6ff; --accent-ink: #11161b; --grid: #222b34; --axis: #3a4652;
+  --hit: #62a6ff; --roof: #3fd29a; --pass: #7d8894; --warn: #ff6b6b; --car: #2c3742; --ego: #34404c; --groundc: #b9a587; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; }
+p { margin: 0; }
+.lede { margin-top: 4px; color: var(--muted); max-width: 76ch; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.cap { font-size: 14.5px; }
+.cap b, .readout b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
+canvas { display: block; width: 100%; border-radius: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: inherit; font-size: 14px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.sliders { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 18px; font-size: 14px; }
+@media (max-width: 700px) { .sliders { grid-template-columns: minmax(0, 1fr); } }
+.sliders label { display: grid; gap: 2px; }
+.sliders span { color: var(--muted); }
+.sliders output { font-family: var(--font-num); color: var(--ink); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.readout { font-size: 14.5px; background: var(--chip); border-radius: 8px; padding: 8px 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>前车框为什么偏</h1>
+    <p class="lede">你跑出来：前车框中心 (12.70, 0.00)，真中心 (15.00, 0.00)，差 2.30 米；框长只有 0.08 米。两张图：侧视看激光打到了前车哪儿，俯视看框为什么只能框住看得见的那几面。</p>
+  </header>
+
+  <section class="panel">
+    <h2>① 侧视：正前方这一条线上，激光打到了哪</h2>
+    <canvas id="side" aria-label="侧视图：雷达、前车和几根往下的激光"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--hit)"></i>打在车尾</span>
+      <span><i style="background:var(--roof)"></i>能落到车顶的角度缝</span>
+      <span><i style="background:var(--pass)"></i>飞过车顶</span>
+    </div>
+    <p class="cap">雷达离地 <b>1.8</b> 米，前车车顶离地 <b>1.5</b> 米，只差 0.3 米。激光要落在车顶上（车尾 12.7 米到车头 17.3 米之间），往下的角度必须在 <b>0.99°～1.35°</b> 之间，这条缝只有 0.36° 宽；可相邻两根激光差 <b>1.29°</b>：−0.32° 那根太平，飞过车顶（320 米外才落地，超过 50 米量程）；−1.61° 那根打在车尾 <b>1.44</b> 米高处，比车顶低 6 厘米。所以车顶 <b>0</b> 个点，105 个点全在车尾，你的最高点 z = −0.36 就是 1.44 米高。</p>
+  </section>
+
+  <section class="panel">
+    <h2>② 俯视：框只能框住看得见的那几面</h2>
+    <div class="chips" role="group" aria-label="选一辆车">
+      <button class="chip" id="p-lead" data-x="15" data-y="0" data-yaw="0" aria-pressed="true">正前方的前车</button>
+      <button class="chip" id="p-park" data-x="9" data-y="-4.5" data-yaw="-14" aria-pressed="false">斜前方停的车</button>
+      <button class="chip" id="p-side" data-x="1.5" data-y="3.6" data-yaw="0" aria-pressed="false">左边并排的车</button>
+    </div>
+    <div class="sliders">
+      <label for="sx"><span>车中心往前 <output id="ox"></output> 米</span><input type="range" id="sx" min="-2" max="30" step="0.1" value="15"></label>
+      <label for="sy"><span>车中心往左 <output id="oy"></output> 米</span><input type="range" id="sy" min="-8" max="8" step="0.1" value="0"></label>
+      <label for="syaw"><span>车头朝向 <output id="oyaw"></output>°（往左转为正）</span><input type="range" id="syaw" min="-45" max="45" step="1" value="0"></label>
+    </div>
+    <canvas id="top" aria-label="俯视图：雷达一圈激光打在车身上的点和算出来的框"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--hit)"></i>打到的点（每 0.4° 一根）</span>
+      <span><i style="background:var(--muted)"></i>真车（虚线，o = 真中心）</span>
+      <span><i style="background:var(--ink)"></i>min / max 框（+ = 框中心）</span>
+      <span><i style="background:var(--warn)"></i>中心差</span>
+    </div>
+    <p id="readout" class="readout" aria-live="polite"></p>
+    <p class="cap">这张图只算车身一圈（同一高度），不算车顶。停的车这里差 <b>0.58</b> 米，你跑出来是 <b>0.31</b>：它离得近，车顶也被打到一圈点，框又补全了一点。</p>
+  </section>
+</div>
+
+<script>
+const CAR_L = 4.6, CAR_W = 1.9, LIDAR_H = 1.8, CAR_H = 1.5;
+const ANG = Array.from({ length: 32 }, (_, i) => 10 - i * 40 / 31);
+let C = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const n of ["surface", "ink", "muted", "line", "grid", "axis", "hit", "roof", "pass", "warn", "car", "ego", "groundc"]) C[n] = cs.getPropertyValue("--" + n).trim();
+  C.font = cs.getPropertyValue("--font-num").trim();
+}
+const f2 = v => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
+const deg = Math.PI / 180;
+
+function setup(cv, h) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + "px";
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = C.surface; ctx.fillRect(0, 0, w, h);
+  return ctx;
+}
+function tag(ctx, W, H, text, x, y, color, align = "left", base = "middle") {
+  ctx.font = `600 12px ${C.font}`;
+  const w = ctx.measureText(text).width + 10, h = 18;
+  let bx = align === "left" ? x : align === "right" ? x - w : x - w / 2;
+  let by = base === "middle" ? y - h / 2 : base === "top" ? y : y - h;
+  bx = Math.max(2, Math.min(W - w - 2, bx)); by = Math.max(2, Math.min(H - h - 2, by));
+  ctx.globalAlpha = 0.93; ctx.fillStyle = C.surface; ctx.fillRect(bx, by, w, h); ctx.globalAlpha = 1;
+  ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+  ctx.fillStyle = color; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(text, bx + 5, by + h / 2 + 0.5);
+}
+
+/* ---------- side view ---------- */
+function drawSide() {
+  const cv = document.getElementById("side");
+  const W = cv.clientWidth;
+  const x0 = -1.5, x1 = 19.5, EX = 5;
+  const sx = (W - 40) / (x1 - x0), sz = sx * EX;
+  const H = Math.round(2.15 * sz + 46);
+  const ctx = setup(cv, H);
+  const X = x => 30 + (x - x0) * sx, Z = z => H - 30 - z * sz;
+  // grid + ground
+  ctx.lineWidth = 1; ctx.font = `11px ${C.font}`;
+  for (let x = 0; x <= 19; x += 1) {
+    ctx.strokeStyle = C.grid; ctx.beginPath(); ctx.moveTo(X(x), Z(0)); ctx.lineTo(X(x), Z(2.1)); ctx.stroke();
+    if (x % 2 === 0 || x === 13 || x === 17) {}
+  }
+  for (const x of [0, 5, 10, 12.7, 15, 17.3]) { ctx.fillStyle = C.muted; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText(String(x), X(x), Z(0) + 6); }
+  for (const z of [0.5, 1.0, 1.5, 2.0]) {
+    ctx.strokeStyle = C.grid; ctx.beginPath(); ctx.moveTo(X(x0), Z(z)); ctx.lineTo(X(x1), Z(z)); ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(z.toFixed(1), 26, Z(z));
+  }
+  ctx.strokeStyle = C.groundc; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X(x0), Z(0)); ctx.lineTo(X(x1), Z(0)); ctx.stroke();
+  ctx.fillStyle = C.muted; ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+  ctx.fillText(`x（米，往前）→　竖直方向放大 ${EX} 倍（所以角度看着比真实陡）`, W - 6, H - 2);
+  ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("离地高度（米）", 4, 2);
+  // my car + lidar
+  ctx.fillStyle = C.ego; ctx.fillRect(X(-1.5), Z(1.5), X(2.3) - X(-1.5), Z(0.25) - Z(1.5));
+  ctx.fillStyle = C.ink; ctx.fillRect(X(0) - 2, Z(1.8), 4, Z(1.5) - Z(1.8));
+  ctx.beginPath(); ctx.arc(X(0), Z(1.8), 5, 0, Math.PI * 2); ctx.fill();
+  tag(ctx, W, H, "雷达 离地 1.8", X(0) + 8, Z(1.8) - 10, C.ink, "left", "bottom");
+  // lead car
+  ctx.fillStyle = C.car; ctx.fillRect(X(12.7), Z(1.5), X(17.3) - X(12.7), Z(0) - Z(1.5));
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1; ctx.strokeRect(X(12.7), Z(1.5), X(17.3) - X(12.7), Z(0) - Z(1.5));
+  tag(ctx, W, H, "前车 车尾 12.7 → 车头 17.3，高 1.5", X(15), Z(0.8), C.muted, "center", "middle");
+  // roof window wedge
+  ctx.fillStyle = C.roof; ctx.globalAlpha = 0.18;
+  ctx.beginPath(); ctx.moveTo(X(0), Z(1.8)); ctx.lineTo(X(12.7), Z(1.5)); ctx.lineTo(X(17.3), Z(1.5)); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1; ctx.strokeStyle = C.roof; ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(X(0), Z(1.8)); ctx.lineTo(X(12.7), Z(1.5)); ctx.moveTo(X(0), Z(1.8)); ctx.lineTo(X(17.3), Z(1.5)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = C.roof; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(X(12.7), Z(1.5)); ctx.lineTo(X(17.3), Z(1.5)); ctx.stroke();
+  tag(ctx, W, H, "车顶缝：往下 0.99°～1.35°", X(9.5), Z(1.62) - 2, C.roof, "center", "bottom");
+  // rays
+  for (const a of ANG) {
+    if (a >= 0 || a < -9) continue;
+    const t = Math.tan(-a * deg);
+    const zr = LIDAR_H - 12.7 * t;
+    ctx.lineWidth = 1.8; ctx.setLineDash([]);
+    if (zr > CAR_H) {
+      const xr = (LIDAR_H - CAR_H) / t;
+      if (xr <= 17.3) { ctx.strokeStyle = C.roof; ctx.beginPath(); ctx.moveTo(X(0), Z(1.8)); ctx.lineTo(X(xr), Z(1.5)); ctx.stroke(); }
+      else {
+        ctx.strokeStyle = C.pass; ctx.setLineDash([6, 4]);
+        ctx.beginPath(); ctx.moveTo(X(0), Z(1.8)); ctx.lineTo(X(x1), Z(LIDAR_H - x1 * t)); ctx.stroke(); ctx.setLineDash([]);
+        tag(ctx, W, H, `${a.toFixed(2)}°：飞过车顶，${Math.round(LIDAR_H / t)} 米外才落地`, X(x1) - 4, Z(LIDAR_H - x1 * t) - 6, C.pass, "right", "bottom");
+      }
+    } else if (zr >= 0) {
+      ctx.strokeStyle = C.hit; ctx.beginPath(); ctx.moveTo(X(0), Z(1.8)); ctx.lineTo(X(12.7), Z(zr)); ctx.stroke();
+      ctx.fillStyle = C.hit; ctx.beginPath(); ctx.arc(X(12.7), Z(zr), 3.5, 0, Math.PI * 2); ctx.fill();
+      if (Math.abs(a + 1.61) < 0.05) tag(ctx, W, H, `${a.toFixed(2)}°：打在车尾 ${zr.toFixed(2)} 米高（车顶 1.50）`, X(12.7) - 8, Z(zr) + 4, C.hit, "right", "top");
+    } else {
+      const xg = LIDAR_H / t;
+      ctx.strokeStyle = C.pass; ctx.globalAlpha = 0.45; ctx.beginPath(); ctx.moveTo(X(0), Z(1.8)); ctx.lineTo(X(xg), Z(0)); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+  }
+}
+
+/* ---------- top view ---------- */
+function castCar(cx, cy, yawDeg) {
+  const yaw = yawDeg * deg, c = Math.cos(-yaw), s = Math.sin(-yaw);
+  const px = c * (-cx) - s * (-cy), py = s * (-cx) + c * (-cy);   // lidar in car frame
+  const hits = [];
+  for (let k = 0; k < 900; k++) {
+    const az = k * 0.4 * deg, dx0 = Math.cos(az), dy0 = Math.sin(az);
+    const dx = c * dx0 - s * dy0, dy = s * dx0 + c * dy0;
+    let tn = -Infinity, tf = Infinity, face = null;
+    for (const [p, d, h, fneg, fpos] of [[px, dx, CAR_L / 2, "rear", "front"], [py, dy, CAR_W / 2, "right", "left"]]) {
+      if (Math.abs(d) < 1e-12) { if (Math.abs(p) > h) { tn = Infinity; } continue; }
+      const t1 = (-h - p) / d, t2 = (h - p) / d;
+      const lo = Math.min(t1, t2), hi = Math.max(t1, t2);
+      if (lo > tn) { tn = lo; face = t1 < t2 ? fneg : fpos; }
+      if (hi < tf) tf = hi;
+    }
+    if (tn <= tf && tn > 0 && tn < 50) hits.push({ x: tn * dx0, y: tn * dy0, face });
+  }
+  return hits;
+}
+function carCorners(cx, cy, yawDeg) {
+  const yaw = yawDeg * deg, c = Math.cos(yaw), s = Math.sin(yaw), hx = CAR_L / 2, hy = CAR_W / 2;
+  return [[hx, hy], [-hx, hy], [-hx, -hy], [hx, -hy]].map(([x, y]) => [cx + c * x - s * y, cy + s * x + c * y]);
+}
+const FACE = { rear: "车尾", front: "车头", left: "左侧", right: "右侧" };
+
+function drawTop() {
+  const cx = +sx.value, cy = +sy.value, yaw = +syaw.value;
+  ox.textContent = cx.toFixed(1); oy.textContent = cy.toFixed(1); oyaw.textContent = yaw;
+  const cv = document.getElementById("top");
+  const W = cv.clientWidth;
+  const vx0 = -4, vx1 = 30, vy0 = -8, vy1 = 8;
+  const s = (W - 20) / (vx1 - vx0);
+  const H = Math.round((vy1 - vy0) * s + 20);
+  const ctx = setup(cv, H);
+  const X = x => 10 + (x - vx0) * s, Y = y => 10 + (vy1 - y) * s;
+  ctx.lineWidth = 1; ctx.font = `11px ${C.font}`;
+  for (let x = 0; x <= 30; x += 5) {
+    ctx.strokeStyle = x === 0 ? C.axis : C.grid; ctx.beginPath(); ctx.moveTo(X(x), Y(vy1)); ctx.lineTo(X(x), Y(vy0)); ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(String(x), X(x), H - 2);
+  }
+  for (let y = -5; y <= 5; y += 5) {
+    ctx.strokeStyle = y === 0 ? C.axis : C.grid; ctx.beginPath(); ctx.moveTo(X(vx0), Y(y)); ctx.lineTo(X(vx1), Y(y)); ctx.stroke();
+    ctx.fillStyle = C.muted; ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(String(y), X(vx0) + 2, Y(y) - 2);
+  }
+  ctx.fillStyle = C.muted; ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.fillText("x（米，往前）→", W - 8, H - 14);
+  ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("↑ y（米，往左）", X(vx0) + 2, 12);
+  // ego
+  ctx.fillStyle = C.ego; ctx.fillRect(X(-2.3), Y(0.95), 4.6 * s, 1.9 * s);
+  ctx.fillStyle = C.ink; ctx.beginPath(); ctx.moveTo(X(0) + 7, Y(0)); ctx.lineTo(X(0) - 4, Y(0) - 5); ctx.lineTo(X(0) - 4, Y(0) + 5); ctx.fill();
+  const hits = castCar(cx, cy, yaw);
+  // faint rays
+  ctx.strokeStyle = C.hit; ctx.globalAlpha = 0.16; ctx.lineWidth = 1;
+  hits.forEach((h, i) => { if (i % 4 === 0) { ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(h.x), Y(h.y)); ctx.stroke(); } });
+  ctx.globalAlpha = 1;
+  // true car
+  const cs = carCorners(cx, cy, yaw);
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1.4; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); cs.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1]))); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = C.muted; ctx.beginPath(); ctx.arc(X(cx), Y(cy), 4, 0, Math.PI * 2); ctx.fill();
+  // nose marker
+  const nx = cx + Math.cos(yaw * deg) * CAR_L / 2, ny = cy + Math.sin(yaw * deg) * CAR_L / 2;
+  ctx.beginPath(); ctx.arc(X(nx), Y(ny), 2.5, 0, Math.PI * 2); ctx.fill();
+  // hits
+  ctx.fillStyle = C.hit;
+  for (const h of hits) { ctx.beginPath(); ctx.arc(X(h.x), Y(h.y), 2.4, 0, Math.PI * 2); ctx.fill(); }
+  const out = document.getElementById("readout");
+  if (!hits.length) { out.innerHTML = "这个位置一根激光都没打到车（超过 50 米，或者被我的车挡住了）。"; return; }
+  const xs = hits.map(h => h.x), ys = hits.map(h => h.y);
+  const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
+  const bcx = (bx0 + bx1) / 2, bcy = (by0 + by1) / 2;
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.strokeRect(X(bx0), Y(by1), Math.max(1.5, (bx1 - bx0) * s), Math.max(1.5, (by1 - by0) * s));
+  ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(X(bcx) - 7, Y(bcy)); ctx.lineTo(X(bcx) + 7, Y(bcy)); ctx.moveTo(X(bcx), Y(bcy) - 7); ctx.lineTo(X(bcx), Y(bcy) + 7); ctx.stroke();
+  const err = Math.hypot(bcx - cx, bcy - cy);
+  if (err > 0.05) {
+    ctx.strokeStyle = C.warn; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X(bcx), Y(bcy)); ctx.lineTo(X(cx), Y(cy)); ctx.stroke();
+    tag(ctx, W, H, `差 ${f2(err)} 米`, (X(bcx) + X(cx)) / 2, Math.min(Y(bcy), Y(cy)) - Math.max(14, CAR_W * s / 2 + 8), C.warn, "center", "bottom");
+  }
+  const faces = [...new Set(hits.map(h => h.face))].map(f => FACE[f]);
+  const shape = faces.length === 1 ? "一条线（I 形）" : "两条边拐个角（L 形）";
+  out.innerHTML = `这一圈（同一高度）打到 <b>${hits.length}</b> 个点，全在 <b>${faces.join(" + ")}</b>，俯视是${shape}。框 <b>${f2(bx1 - bx0)} × ${f2(by1 - by0)}</b>（真车 4.60 × 1.90），框中心 <b>(${f2(bcx)}, ${f2(bcy)})</b>，真中心 <b>(${f2(cx)}, ${f2(cy)})</b>，差 <b>${f2(err)}</b> 米。`;
+}
+
+const sx = document.getElementById("sx"), sy = document.getElementById("sy"), syaw = document.getElementById("syaw");
+const ox = document.getElementById("ox"), oy = document.getElementById("oy"), oyaw = document.getElementById("oyaw");
+for (const el of [sx, sy, syaw]) el.addEventListener("input", () => { document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false")); drawTop(); });
+document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
+  sx.value = b.dataset.x; sy.value = b.dataset.y; syaw.value = b.dataset.yaw;
+  document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c === b)));
+  drawTop();
+}));
+function all() { readColors(); drawSide(); drawTop(); }
+window.addEventListener("resize", all);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", all);
+new MutationObserver(all).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+all();
+</script>
+
+</body>
+</html>

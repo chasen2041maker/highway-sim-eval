@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>一堆点怎么画框</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: step list on the left, a top-view canvas on the right (stacked on phones); the canvas zooms from the whole scene into one cluster and sweeps x, then y, to build the box. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --accent: #1e66d6; --accent-ink: #ffffff; --grid: #e6eaee; --axis: #b9c2cc;
+  --xcol: #1e66d6; --ycol: #9a3fc4; --warn: #d23b3b; --ego: #c9d0d8;
+  --c0: #2a78d6; --c1: #d23b3b; --c2: #1a9a6c; --c3: #9a3fc4; --c4: #d96f00;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --accent: #62a6ff; --accent-ink: #11161b; --grid: #222b34; --axis: #3a4652;
+    --xcol: #62a6ff; --ycol: #c77dff; --warn: #ff6b6b; --ego: #34404c;
+    --c0: #5aa2ff; --c1: #ff6b6b; --c2: #3fd29a; --c3: #c77dff; --c4: #ffa040; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --accent: #62a6ff; --accent-ink: #11161b; --grid: #222b34; --axis: #3a4652;
+  --xcol: #62a6ff; --ycol: #c77dff; --warn: #ff6b6b; --ego: #34404c;
+  --c0: #5aa2ff; --c1: #ff6b6b; --c2: #3fd29a; --c3: #c77dff; --c4: #ffa040; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; }
+p { margin: 0; }
+.lede { margin-top: 4px; color: var(--muted); max-width: 76ch; }
+.num, .readout b { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 14px; align-items: start; }
+@media (max-width: 880px) { .main { grid-template-columns: minmax(0, 1fr); } .main .stage { order: -1; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+#steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: s; }
+#steps li { counter-increment: s; padding: 8px 10px 8px 34px; border-radius: 8px; position: relative; cursor: pointer; color: var(--muted); font-size: 14px; }
+#steps li::before { content: counter(s); position: absolute; left: 8px; top: 8px; width: 19px; height: 19px; border-radius: 50%; border: 1px solid var(--line); font-family: var(--font-num); font-size: 12px; line-height: 17px; text-align: center; }
+#steps li b { color: var(--ink); font-weight: 700; }
+#steps li[aria-current="step"] { background: var(--chip); color: var(--ink); }
+#steps li[aria-current="step"]::before { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+#steps li:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+canvas { display: block; width: 100%; border-radius: 6px; background: var(--surface); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.btn { font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+#stepno { margin-left: auto; color: var(--muted); font-size: 13px; }
+.readout { font-size: 14.5px; min-height: 2.8em; }
+.memo { border-left: 3px solid var(--accent); padding-left: 12px; }
+.memo p + p { margin-top: 4px; color: var(--muted); font-size: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>一堆点怎么画框</h1>
+    <p class="lede">俯视图：x 朝前、y 朝左，原点 = 车顶上的雷达，单位米。点是假雷达扫一圈、去完地面（门槛 −1.6）、DBSCAN（eps 1.0、min_samples 5）分完堆的真实数据，和你跑的一样。</p>
+  </header>
+
+  <div class="chips" role="group" aria-label="选一堆">
+    <button class="chip" id="pick-parked" data-pick="parked" aria-pressed="true">第 4 堆：路边停的车</button>
+    <button class="chip" id="pick-ped" data-pick="ped" aria-pressed="false">第 2 堆：行人</button>
+    <button class="chip" id="pick-toy" data-pick="toy" aria-pressed="false">示意：6 个整数点（好心算）</button>
+  </div>
+
+  <div class="main">
+    <section class="panel">
+      <h2>一步一步</h2>
+      <ol id="steps"></ol>
+    </section>
+    <section class="panel stage">
+      <canvas id="cv" aria-label="俯视图：点、扫描线和框"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--xcol)"></i>x 方向（往前）</span>
+        <span><i style="background:var(--ycol)"></i>y 方向（往左）</span>
+        <span><i style="background:var(--ink)"></i>算出来的框</span>
+        <span><i style="background:var(--warn)"></i>“最近点 ↔ 最远点”</span>
+      </div>
+      <div class="controls">
+        <button class="btn" id="prev">上一步</button>
+        <button class="btn" id="replay">重播这一步</button>
+        <button class="btn primary" id="next">下一步</button>
+        <span id="stepno" class="num"></span>
+      </div>
+      <p id="readout" class="readout" aria-live="polite"></p>
+    </section>
+  </div>
+
+  <section class="panel memo">
+    <h2>一句话记住</h2>
+    <p>x 和 y 分开看，各找最小和最大：<b>中心 = 两头的正中间，长和宽 = 大 − 小</b>。一堆点变成一行 4 个数，K 堆就是 K 行；噪声（−1）不算一堆。</p>
+    <p>这个框的边和 x、y 轴平行（不带朝向），叫“轴对齐框”。</p>
+  </section>
+</div>
+
+<script>
+const ALL = [[12.703,0.0,0],[12.697,0.089,0],[12.713,0.178,0],[12.702,0.266,0],[12.689,0.354,0],[12.707,0.444,0],[12.726,0.533,0],[12.719,0.622,0],[12.686,0.709,0],[12.675,0.797,0],[12.688,0.887,0],[26.295,2.764,-1],[23.258,2.609,-1],[21.743,2.593,1],[21.715,2.743,1],[21.718,2.898,1],[21.714,3.052,1],[21.711,3.206,1],[21.717,3.362,1],[21.722,3.518,1],[21.691,3.669,1],[21.713,3.829,1],[21.665,3.976,1],[21.677,4.135,1],[21.68,4.293,1],[11.286,5.701,2],[11.078,5.693,2],[10.887,5.691,2],[10.712,5.696,2],[10.704,5.788,2],[10.682,5.873,2],[10.696,5.978,2],[10.697,6.077,2],[10.709,6.183,2],[10.704,6.28,2],[-10.595,1.188,3],[-10.583,1.112,3],[-10.601,1.039,3],[-10.626,0.967,3],[-10.647,0.894,3],[-10.598,0.815,3],[-10.658,0.745,3],[-10.66,0.671,3],[-10.653,0.596,3],[-10.647,0.521,3],[-10.639,0.446,3],[-10.677,0.373,3],[-10.689,0.299,3],[-10.688,0.224,3],[-10.679,0.149,3],[-10.661,0.074,3],[-10.63,0.0,3],[-10.654,-0.074,3],[-10.666,-0.149,3],[-10.626,-0.223,3],[-10.658,-0.298,3],[-10.656,-0.372,3],[-10.659,-0.447,3],[-10.618,-0.519,3],[-10.624,-0.594,3],[9.144,-5.451,4],[9.169,-5.38,4],[9.257,-5.344,4],[9.255,-5.258,4],[9.306,-5.201,4],[9.332,-5.13,4],[9.4,-5.082,4],[9.43,-5.014,4],[9.453,-4.942,4],[9.437,-4.85,4],[9.511,-4.804,4],[9.555,-4.743,4],[9.594,-4.679,4],[9.597,-4.598,4],[9.673,-4.552,4],[9.648,-4.458,4],[9.691,-4.396,4],[9.75,-4.341,4],[9.764,-4.266,4],[9.829,-4.213,4],[9.825,-4.13,4],[9.839,-4.055,4],[9.871,-3.988,4],[9.886,-3.914,4],[9.909,-3.844,4],[10.235,-3.888,4],[10.933,-4.066,4],[12.726,-0.89,0],[12.685,-0.798,0],[12.734,-0.712,0],[12.694,-0.621,0],[12.731,-0.534,0],[12.691,-0.443,0],[12.685,-0.354,0],[12.705,-0.266,0],[12.721,-0.178,0],[12.703,-0.089,0],[12.688,0.0,0],[12.673,0.088,0],[12.672,0.177,0],[12.71,0.266,0],[12.72,0.355,0],[12.697,0.443,0],[12.679,0.531,0],[12.717,0.622,0],[12.674,0.709,0],[12.686,0.798,0],[12.712,0.889,0],[26.292,2.763,-1],[23.308,2.614,-1],[21.761,2.595,1],[21.725,2.744,1],[21.76,2.903,1],[21.739,3.055,1],[21.733,3.209,1],[21.732,3.364,1],[21.717,3.517,1],[21.71,3.672,1],[21.687,3.824,1],[21.65,3.974,1],[21.668,4.133,1],[21.648,4.286,1],[11.316,5.716,2],[11.09,5.7,2],[10.905,5.701,2],[10.694,5.686,2],[10.729,5.801,2],[10.716,5.891,2],[10.719,5.99,2],[10.701,6.079,2],[10.716,6.187,2],[10.706,6.281,2],[-9.729,1.229,3],[-9.712,1.158,3],[-9.707,1.089,3],[-9.693,1.019,3],[-9.736,0.955,3],[-9.716,0.884,3],[-9.696,0.814,3],[-9.669,0.744,3],[-9.707,0.679,3],[-9.677,0.609,3],[-9.666,0.54,3],[-9.694,0.474,3],[-9.706,0.407,3],[-9.726,0.34,3],[-9.706,0.271,3],[-9.716,0.204,3],[-9.676,0.135,3],[-9.7,0.068,3],[-9.702,0.0,3],[-9.717,-0.068,3],[-9.702,-0.135,3],[-9.716,-0.204,3],[-9.69,-0.271,3],[-9.707,-0.339,3],[-9.708,-0.407,3],[-9.675,-0.473,3],[-9.704,-0.543,3],[-9.694,-0.61,3],[6.656,-4.765,4],[6.694,-4.722,4],[6.704,-4.659,4],[6.68,-4.574,4],[6.713,-4.528,4],[6.74,-4.478,4],[6.741,-4.411,4],[6.762,-4.358,4],[6.793,-4.311,4],[6.8,-4.249,4],[6.793,-4.179,4],[6.826,-4.134,4],[6.827,-4.07,4],[6.831,-4.008,4],[6.847,-3.953,4],[6.885,-3.911,4],[6.894,-3.853,4],[6.909,-3.798,4],[6.903,-3.732,4],[6.933,-3.687,4],[6.932,-3.624,4],[6.948,-3.571,4],[6.975,-3.524,4],[6.967,-3.459,4],[7.018,-3.423,4],[7.064,-3.385,4],[7.042,-3.314,4],[7.028,-3.247,4],[7.056,-3.201,4],[7.046,-3.137,4],[7.081,-3.094,4],[7.357,-3.153,4],[7.725,-3.247,4],[8.098,-3.338,4],[8.568,-3.462,4],[9.077,-3.594,4],[9.638,-3.738,4],[10.21,-3.879,4],[10.906,-4.056,4],[12.685,-0.887,0],[12.708,-0.8,0],[12.694,-0.71,0],[12.708,-0.622,0],[12.665,-0.531,0],[12.691,-0.443,0],[12.697,-0.355,0],[12.672,-0.265,0],[12.738,-0.178,0],[12.689,-0.089,0],[12.728,0.0,0],[12.687,0.089,0],[12.695,0.177,0],[12.724,0.267,0],[12.706,0.355,0],[12.704,0.444,0],[12.705,0.533,0],[12.673,0.62,0],[12.692,0.71,0],[12.681,0.798,0],[12.704,0.888,0],[11.318,5.717,2],[11.066,5.687,2],[10.894,5.695,2],[10.714,5.697,2],[10.701,5.786,2],[10.694,5.879,2],[10.699,5.979,2],[10.701,6.079,2],[10.699,6.177,2],[10.702,6.279,2],[-9.706,1.226,3],[-9.695,1.156,3],[-9.673,1.085,3],[-9.699,1.019,3],[-9.732,0.954,3],[-9.74,0.886,3],[-9.689,0.814,3],[-9.718,0.748,3],[-9.703,0.678,3],[-9.706,0.611,3],[-9.725,0.544,3],[-9.717,0.475,3],[-9.703,0.407,3],[-9.681,0.338,3],[-9.678,0.27,3],[-9.699,0.203,3],[-9.706,0.136,3],[-9.71,0.068,3],[-9.716,0.0,3],[-9.72,-0.068,3],[-9.652,-0.135,3],[-9.718,-0.204,3],[-9.679,-0.27,3],[-9.722,-0.34,3],[-9.707,-0.407,3],[-9.713,-0.475,3],[-9.689,-0.542,3],[-9.706,-0.611,3],[6.654,-4.764,4],[6.635,-4.681,4],[6.719,-4.67,4],[6.711,-4.595,4],[6.69,-4.512,4],[6.75,-4.485,4],[6.761,-4.424,4],[6.759,-4.356,4],[6.77,-4.297,4],[6.807,-4.253,4],[6.813,-4.191,4],[6.832,-4.137,4],[6.859,-4.089,4],[6.872,-4.032,4],[6.879,-3.972,4],[6.891,-3.914,4],[6.872,-3.841,4],[6.889,-3.787,4],[6.937,-3.751,4],[6.948,-3.694,4],[6.96,-3.638,4],[6.979,-3.587,4],[6.969,-3.52,4],[7.002,-3.476,4],[6.988,-3.408,4],[7.021,-3.364,4],[7.05,-3.318,4],[7.035,-3.251,4],[7.096,-3.219,4],[7.095,-3.159,4],[7.113,-3.108,4],[7.344,-3.148,4],[7.689,-3.232,4],[8.105,-3.34,4],[8.572,-3.463,4],[9.05,-3.583,4],[9.619,-3.731,4],[10.226,-3.885,4],[10.911,-4.058,4],[12.723,-0.89,0],[12.693,-0.799,0],[12.719,-0.711,0],[12.688,-0.621,0],[12.684,-0.532,0],[12.713,-0.444,0],[12.688,-0.354,0],[12.669,-0.265,0],[12.698,-0.177,0],[12.673,-0.088,0],[12.7,0.0,0],[12.727,0.089,0],[12.719,0.178,0],[12.7,0.266,0],[12.697,0.355,0],[12.694,0.443,0],[12.687,0.532,0],[12.707,0.621,0],[12.697,0.71,0],[12.692,0.799,0],[12.705,0.888,0],[11.269,5.692,2],[11.118,5.714,2],[10.885,5.69,2],[10.709,5.694,2],[10.688,5.779,2],[10.714,5.89,2],[10.668,5.962,2],[10.722,6.091,2],[10.696,6.175,2],[10.695,6.274,2],[-9.705,1.226,3],[-9.681,1.154,3],[-9.69,1.087,3],[-9.688,1.018,3],[-9.701,0.951,3],[-9.714,0.884,3],[-9.695,0.814,3],[-9.697,0.746,3],[-9.658,0.675,3],[-9.679,0.609,3],[-9.737,0.544,3],[-9.666,0.473,3],[-9.727,0.408,3],[-9.694,0.339,3],[-9.661,0.27,3],[-9.729,0.204,3],[-9.726,0.136,3],[-9.69,0.068,3],[-9.717,0.0,3],[-9.693,-0.068,3],[-9.701,-0.135,3],[-9.703,-0.203,3],[-9.695,-0.271,3],[-9.71,-0.339,3],[-9.708,-0.407,3],[-9.69,-0.474,3],[-9.706,-0.543,3],[-9.69,-0.61,3],[6.643,-4.756,4],[6.675,-4.709,4],[6.661,-4.63,4],[6.693,-4.583,4],[6.702,-4.521,4],[6.729,-4.471,4],[6.772,-4.432,4],[6.804,-4.385,4],[6.79,-4.309,4],[6.778,-4.235,4],[6.821,-4.196,4],[6.83,-4.137,4],[6.827,-4.07,4],[6.867,-4.029,4],[6.858,-3.959,4],[6.87,-3.903,4],[6.896,-3.854,4],[6.921,-3.805,4],[6.916,-3.74,4],[6.943,-3.692,4],[6.918,-3.617,4],[6.97,-3.582,4],[6.97,-3.521,4],[6.983,-3.466,4],[6.961,-3.395,4],[6.994,-3.351,4],[7.002,-3.295,4],[7.058,-3.261,4],[7.044,-3.195,4],[7.079,-3.152,4],[7.1,-3.102,4],[7.338,-3.145,4],[7.696,-3.235,4],[8.14,-3.355,4],[8.567,-3.461,4],[9.032,-3.576,4],[9.614,-3.729,4],[10.211,-3.879,4],[10.931,-4.065,4],[12.665,-0.886,0],[12.733,-0.801,0],[12.728,-0.712,0],[12.688,-0.621,0],[12.698,-0.532,0],[12.701,-0.444,0],[12.722,-0.355,0],[12.69,-0.266,0],[12.712,-0.178,0],[12.705,-0.089,0],[12.706,0.0,0],[12.721,0.089,0],[12.703,0.177,0],[12.675,0.265,0],[12.718,0.355,0],[12.69,0.443,0],[12.718,0.533,0],[12.705,0.621,0],[12.681,0.709,0],[12.705,0.799,0],[12.687,0.887,0],[11.27,5.693,2],[11.074,5.691,2],[10.879,5.687,2],[10.733,5.707,2],[10.713,5.792,2],[10.676,5.869,2],[10.681,5.97,2],[10.705,6.082,2],[10.692,6.173,2],[10.704,6.28,2],[-9.676,1.222,3],[-9.716,1.159,3],[-9.708,1.089,3],[-9.686,1.018,3],[-9.694,0.951,3],[-9.685,0.881,3],[-9.69,0.814,3],[-9.726,0.748,3],[-9.701,0.678,3],[-9.678,0.609,3],[-9.71,0.543,3],[-9.711,0.475,3],[-9.699,0.407,3],[-9.699,0.339,3],[-9.71,0.271,3],[-9.715,0.204,3],[-9.698,0.135,3],[-9.689,0.068,3],[-9.695,0.0,3],[-9.719,-0.068,3],[-9.715,-0.136,3],[-9.692,-0.203,3],[-9.756,-0.273,3],[-9.75,-0.34,3],[-9.679,-0.406,3],[-9.72,-0.475,3],[-9.68,-0.541,3],[-9.701,-0.61,3],[6.65,-4.761,4],[6.658,-4.697,4],[6.687,-4.648,4],[6.716,-4.599,4],[6.739,-4.546,4],[6.756,-4.489,4],[6.762,-4.425,4],[6.77,-4.363,4],[6.769,-4.296,4],[6.8,-4.249,4],[6.834,-4.204,4],[6.825,-4.133,4],[6.85,-4.084,4],[6.852,-4.02,4],[6.874,-3.969,4],[6.864,-3.9,4],[6.872,-3.841,4],[6.892,-3.789,4],[6.889,-3.725,4],[6.952,-3.696,4],[6.993,-3.656,4],[6.961,-3.577,4],[6.964,-3.518,4],[6.999,-3.474,4],[7.034,-3.431,4],[7.021,-3.364,4],[7.056,-3.321,4],[7.047,-3.256,4],[7.065,-3.205,4],[7.047,-3.137,4],[7.094,-3.099,4],[7.331,-3.142,4],[7.695,-3.235,4],[8.089,-3.334,4],[8.573,-3.464,4],[9.097,-3.602,4],[9.592,-3.721,4],[10.218,-3.882,4],[10.916,-4.059,4],[12.679,-0.887,0],[12.72,-0.8,0],[12.663,-0.708,0],[12.721,-0.622,0],[12.721,-0.533,0],[12.659,-0.442,0],[12.695,-0.355,0],[12.706,-0.266,0],[12.72,-0.178,0],[12.689,-0.089,0],[-9.671,1.222,3],[-9.675,1.154,3],[-9.695,1.087,3],[-9.722,1.022,3],[-9.698,0.951,3],[-9.673,0.88,3],[-9.715,0.816,3],[-9.678,0.745,3],[-9.725,0.68,3],[-9.718,0.611,3],[-9.73,0.544,3],[-9.725,0.476,3],[-9.722,0.407,3],[-9.714,0.339,3],[-9.694,0.271,3],[-9.698,0.203,3],[-9.7,0.135,3],[-9.704,0.068,3],[-9.689,0.0,3],[-9.686,-0.068,3],[-9.728,-0.136,3],[-9.677,-0.203,3],[-9.721,-0.272,3],[-9.74,-0.34,3],[-9.68,-0.406,3],[-9.728,-0.476,3],[-9.698,-0.542,3],[-9.729,-0.612,3],[6.637,-4.752,4],[6.689,-4.719,4],[6.696,-4.654,4],[6.73,-4.608,4],[6.713,-4.528,4],[6.742,-4.479,4],[6.739,-4.41,4],[6.776,-4.367,4],[6.745,-4.281,4],[6.795,-4.246,4],[6.794,-4.18,4],[6.821,-4.131,4],[6.855,-4.086,4],[6.859,-4.024,4],[6.877,-3.97,4],[6.867,-3.901,4],[6.848,-3.827,4],[6.889,-3.787,4],[6.927,-3.746,4],[6.916,-3.677,4],[6.957,-3.637,4],[6.932,-3.563,4],[6.976,-3.524,4],[7.016,-3.483,4],[7.015,-3.421,4],[7.004,-3.356,4],[7.046,-3.315,4],[7.045,-3.255,4],[7.049,-3.198,4],[7.095,-3.159,4],[7.095,-3.1,4],[7.312,-3.134,4],[7.703,-3.238,4],[8.146,-3.357,4],[8.56,-3.458,4],[9.092,-3.6,4],[9.619,-3.731,4],[10.241,-3.89,4],[-9.674,0.744,3],[-9.673,0.473,3],[-9.699,0.407,3],[-9.704,0.203,3],[-9.679,0.068,3],[-9.674,0.0,3],[-9.662,-0.067,3],[-9.705,-0.136,3],[-9.704,-0.271,3],[-9.703,-0.339,3],[-9.66,-0.405,3],[-9.694,-0.542,3],[6.646,-4.758,4],[6.662,-4.7,4],[6.67,-4.636,4],[6.697,-4.586,4],[6.75,-4.553,4],[6.734,-4.474,4],[6.75,-4.417,4],[6.766,-4.361,4],[6.789,-4.309,4],[6.814,-4.258,4],[6.805,-4.187,4],[6.837,-4.141,4],[6.89,-4.107,4],[6.809,-3.995,4],[6.861,-3.961,4],[6.879,-3.908,4],[6.895,-3.854,4],[6.912,-3.8,4],[6.911,-3.737,4],[6.991,-3.717,4],[6.945,-3.631,4],[6.968,-3.581,4],[6.974,-3.523,4],[7.002,-3.476,4],[7.015,-3.422,4],[7.025,-3.366,4],[7.059,-3.322,4],[7.045,-3.255,4],[7.079,-3.211,4],[7.048,-3.138,4],[7.106,-3.105,4],[7.357,-3.153,4],[7.725,-3.247,4],[8.12,-3.347,4],[8.556,-3.457,4],[9.012,-3.568,4],[6.65,-4.761,4],[6.656,-4.695,4],[6.669,-4.635,4],[6.705,-4.591,4],[6.709,-4.525,4],[6.769,-4.497,4],[6.752,-4.419,4],[6.77,-4.363,4],[6.779,-4.302,4],[6.783,-4.239,4],[6.822,-4.197,4],[6.832,-4.138,4],[6.848,-4.082,4],[6.859,-4.024,4],[6.836,-3.947,4],[6.89,-3.914,4],[6.891,-3.851,4],[6.909,-3.798,4],[6.94,-3.752,4],[6.932,-3.686,4],[6.929,-3.622,4],[6.973,-3.583,4],[7.015,-3.543,4],[6.97,-3.46,4],[7.012,-3.42,4],[7.013,-3.36,4],[7.055,-3.32,4],[7.047,-3.256,4],[7.037,-3.192,4],[7.038,-3.133,4],[7.114,-3.108,4],[7.347,-3.149,4],[7.701,-3.237,4]];
+const TOY = [[2, 1], [3, 3], [5, 2], [6, 2.5], [4, 3.5], [3, 1.5]];
+const PICKS = {
+  parked: { k: 4, who: "路边停的车" },
+  ped: { k: 2, who: "行人" },
+  toy: { k: null, who: "示意点" },
+};
+const NSTEP = 6;
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+let pick = "parked", step = 0, t0 = performance.now();
+let view = null, viewFrom = null, viewTo = null, vt0 = 0;
+let C = {};
+
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const n of ["bg", "surface", "ink", "muted", "line", "grid", "axis", "xcol", "ycol", "warn", "ego", "c0", "c1", "c2", "c3", "c4"]) C[n] = cs.getPropertyValue("--" + n).trim();
+  C.font = cs.getPropertyValue("--font-num").trim();
+}
+const f2 = v => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
+const fn = v => (Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : f2(v)).replace("-", "−");
+
+function pts() {
+  if (pick === "toy") return TOY;
+  const k = PICKS[pick].k;
+  return ALL.filter(p => p[2] === k).map(p => [p[0], p[1]]);
+}
+function stats(P) {
+  let ix0 = 0, ix1 = 0, iy0 = 0, iy1 = 0, inear = 0, ifar = 0;
+  const d = P.map(p => Math.hypot(p[0], p[1]));
+  P.forEach((p, i) => {
+    if (p[0] < P[ix0][0]) ix0 = i; if (p[0] > P[ix1][0]) ix1 = i;
+    if (p[1] < P[iy0][1]) iy0 = i; if (p[1] > P[iy1][1]) iy1 = i;
+    if (d[i] < d[inear]) inear = i; if (d[i] > d[ifar]) ifar = i;
+  });
+  const x0 = P[ix0][0], x1 = P[ix1][0], y0 = P[iy0][1], y1 = P[iy1][1];
+  return { ix0, ix1, iy0, iy1, inear, ifar, x0, x1, y0, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2,
+    L: x1 - x0, Wd: y1 - y0, dnear: d[inear], dfar: d[ifar],
+    seg: Math.hypot(P[ifar][0] - P[inear][0], P[ifar][1] - P[inear][1]) };
+}
+
+function texts(S, n) {
+  const real = pick !== "toy";
+  const k = PICKS[pick].k;
+  const F = fn;
+  return [
+    real ? `<b>总图（真实比例）</b>：650 个点分成 5 堆，一种颜色一堆。灰色长方形是我的车，雷达在它车顶正中（原点）。现在只看第 ${k} 堆（${PICKS[pick].who}）。`
+         : `<b>示意</b>：6 个点，坐标都是好算的数。原点当雷达。`,
+    real ? `<b>挑出一堆</b>：堆号等于 ${k} 的点，共 ${n} 个。堆号 0、1、2…一直到最大堆号，每一堆都做一遍下面同样的事；噪声的堆号是 −1，不在这个范围里，自然被跳过。`
+         : `<b>挑出一堆</b>：这 6 个点就是一堆。真实数据里，堆号从 0 数到最大堆号，每堆做一遍；噪声 −1 不在里面，自然跳过。`,
+    `<b>只看 x（往前多少米）</b>：竖线从左往右扫。最先碰到的点 x 最小 = ${F(S.x0)}；“目前最大”一路被刷新，扫完是 ${F(S.x1)}。长 = ${F(S.x1)} − ${F(S.x0)} = ${f2(S.L)} 米；中心 x = 两头正中间 = ${f2(S.cx)}。`,
+    `<b>只看 y（往左多少米，负数 = 在右边）</b>：横线从下往上扫。y 最小 = ${F(S.y0)}，y 最大 = ${F(S.y1)}。宽 = ${f2(S.Wd)} 米；中心 y = ${f2(S.cy)}。`,
+    `<b>四条线围成框</b>：中心 (${f2(S.cx)}, ${f2(S.cy)})，长 ${f2(S.L)} × 宽 ${f2(S.Wd)}。管左、右、下、上四条边的，是圈出来的 4 个点，不一定是同一个点。这一堆变成一行 4 个数。`,
+    `<b>对比“最近点 ↔ 最远点”</b>：离雷达最近的点 ${f2(S.dnear)} 米、最远的点 ${f2(S.dfar)} 米，两点连线 ${f2(S.seg)} 米。它是一根斜线：不是长（${f2(S.L)}），不是宽（${f2(S.Wd)}），也说不出中心在哪。所以 x、y 要分开，各找两头。`,
+  ];
+}
+
+function zoomView(S) {
+  const span = Math.max(S.L, S.Wd, 1);
+  const m = Math.max(0.35, span * 0.28);
+  return { x0: S.x0 - m, x1: S.x1 + m, y0: S.y0 - m, y1: S.y1 + m };
+}
+function overView() {
+  return pick === "toy" ? { x0: -1, x1: 8, y0: -1, y1: 5 } : { x0: -18, x1: 30, y0: -9, y1: 9 };
+}
+function targetView(S) { return step === 0 ? overView() : zoomView(S); }
+
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = cv.clientWidth;
+  H = Math.round(W < 560 ? W * 0.78 : W * 0.56);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); cv.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  kick();
+}
+
+function fit(v) {
+  const pad = 34;
+  const s = Math.min((W - 2 * pad) / (v.x1 - v.x0), (H - 2 * pad) / (v.y1 - v.y0));
+  const cx = (v.x0 + v.x1) / 2, cy = (v.y0 + v.y1) / 2;
+  return { s, cx, cy, X: x => W / 2 + (x - cx) * s, Y: y => H / 2 - (y - cy) * s,
+    left: cx - W / 2 / s, right: cx + W / 2 / s, bottom: cy - H / 2 / s, top: cy + H / 2 / s };
+}
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+function tag(text, x, y, color, align = "left", base = "middle") {
+  ctx.font = `600 12px ${C.font}`;
+  const w = ctx.measureText(text).width + 10, h = 18;
+  let bx = align === "left" ? x : align === "right" ? x - w : x - w / 2;
+  let by = base === "middle" ? y - h / 2 : base === "top" ? y : y - h;
+  bx = Math.max(2, Math.min(W - w - 2, bx)); by = Math.max(2, Math.min(H - h - 2, by));
+  ctx.globalAlpha = 0.92; ctx.fillStyle = C.surface; ctx.fillRect(bx, by, w, h); ctx.globalAlpha = 1;
+  ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+  ctx.fillStyle = color; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText(text, bx + 5, by + h / 2 + 0.5);
+}
+function vline(T, x, color, dash = [6, 4], w = 1.5) {
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(T.X(x), 0); ctx.lineTo(T.X(x), H); ctx.stroke(); ctx.setLineDash([]);
+}
+function hline(T, y, color, dash = [6, 4], w = 1.5) {
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash);
+  ctx.beginPath(); ctx.moveTo(0, T.Y(y)); ctx.lineTo(W, T.Y(y)); ctx.stroke(); ctx.setLineDash([]);
+}
+function ring(T, p, color, r = 8) {
+  ctx.strokeStyle = color; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.arc(T.X(p[0]), T.Y(p[1]), r, 0, Math.PI * 2); ctx.stroke();
+}
+function arrowH(T, xa, xb, yScreen, color, label) {
+  const a = T.X(xa), b = T.X(xb);
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(a, yScreen); ctx.lineTo(b, yScreen); ctx.stroke();
+  for (const [p, d] of [[a, 1], [b, -1]]) { ctx.beginPath(); ctx.moveTo(p, yScreen); ctx.lineTo(p + 7 * d, yScreen - 4); ctx.lineTo(p + 7 * d, yScreen + 4); ctx.fill(); }
+  tag(label, (a + b) / 2, yScreen + 4, color, "center", "top");
+}
+function arrowV(T, ya, yb, xScreen, color, label) {
+  const a = T.Y(ya), b = T.Y(yb);
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(xScreen, a); ctx.lineTo(xScreen, b); ctx.stroke();
+  for (const [p, d] of [[a, -1], [b, 1]]) { ctx.beginPath(); ctx.moveTo(xScreen, p); ctx.lineTo(xScreen - 4, p + 7 * d); ctx.lineTo(xScreen + 4, p + 7 * d); ctx.fill(); }
+  tag(label, xScreen + 6, (a + b) / 2, color, "left", "middle");
+}
+
+function grid(T) {
+  const spanW = T.right - T.left;
+  const st = spanW > 30 ? 5 : spanW > 12 ? 2 : spanW > 4 ? 1 : spanW > 1.6 ? 0.5 : 0.2;
+  ctx.lineWidth = 1; ctx.font = `11px ${C.font}`; ctx.fillStyle = C.muted;
+  for (let x = Math.ceil(T.left / st) * st; x <= T.right; x += st) {
+    const X = T.X(x); ctx.strokeStyle = Math.abs(x) < 1e-6 ? C.axis : C.grid;
+    ctx.beginPath(); ctx.moveTo(X, 0); ctx.lineTo(X, H); ctx.stroke();
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(fn(+x.toFixed(2)), X, H - 3);
+  }
+  for (let y = Math.ceil(T.bottom / st) * st; y <= T.top; y += st) {
+    const Y = T.Y(y); ctx.strokeStyle = Math.abs(y) < 1e-6 ? C.axis : C.grid;
+    ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(W, Y); ctx.stroke();
+    ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(fn(+y.toFixed(2)), 4, Y - 7);
+  }
+  ctx.fillStyle = C.muted; ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+  ctx.fillText("x（米，往前）→", W - 6, H - 16);
+  ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("↑ y（米，往左）", 30, 4);
+}
+
+function drawEgo(T) {
+  if (pick === "toy") {
+    ctx.fillStyle = C.ink; ctx.beginPath(); ctx.arc(T.X(0), T.Y(0), 4, 0, Math.PI * 2); ctx.fill();
+    tag("原点 = 雷达", T.X(0) + 8, T.Y(0) + 4, C.muted, "left", "top");
+    return;
+  }
+  const a = T.X(-2.3), b = T.X(2.3), c = T.Y(0.95), d = T.Y(-0.95);
+  ctx.fillStyle = C.ego; ctx.fillRect(a, c, b - a, d - c);
+  ctx.fillStyle = C.ink; ctx.beginPath();
+  ctx.moveTo(T.X(0) + 6, T.Y(0)); ctx.lineTo(T.X(0) - 4, T.Y(0) - 5); ctx.lineTo(T.X(0) - 4, T.Y(0) + 5); ctx.fill();
+  if (step === 0) tag("我的车，雷达 = 原点", a, d + 6, C.muted, "left", "top");
+}
+
+function color(lbl) { return C["c" + (lbl % 5)] || C.ink; }
+
+function draw(now) {
+  readColors();
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = C.surface; ctx.fillRect(0, 0, W, H);
+  const P = pts(), S = stats(P);
+  // view transition
+  let vt = reduce ? 1 : Math.min(1, (now - vt0) / 650);
+  const e = ease(vt);
+  view = { x0: lerp(viewFrom.x0, viewTo.x0, e), x1: lerp(viewFrom.x1, viewTo.x1, e), y0: lerp(viewFrom.y0, viewTo.y0, e), y1: lerp(viewFrom.y1, viewTo.y1, e) };
+  const T = fit(view);
+  grid(T);
+  drawEgo(T);
+
+  const delay = step >= 1 && vt < 1 ? 650 : 0;
+  const p = reduce ? 1 : Math.max(0, Math.min(1, (now - t0 - delay - 150) / 1400));
+  const k = PICKS[pick].k;
+
+  // background points (other clusters)
+  if (pick !== "toy") {
+    for (const q of ALL) {
+      if (q[2] === k) continue;
+      ctx.globalAlpha = step === 0 ? 0.55 : 0.12;
+      ctx.fillStyle = q[2] < 0 ? C.muted : color(q[2]);
+      ctx.beginPath(); ctx.arc(T.X(q[0]), T.Y(q[1]), 2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // sweep state
+  let sweepX = null, sweepY = null;
+  if (step === 2) sweepX = p < 1 ? lerp(T.left, S.x1 + (T.right - S.x1) * 0.0, ease(p)) : null;
+  if (step === 3) sweepY = p < 1 ? lerp(T.bottom, S.y1, ease(p)) : null;
+  const ptColor = pick === "toy" ? C.c4 : color(k);
+  const r = step === 0 ? 2.4 : pick === "toy" ? 6 : 3;
+  for (const q of P) {
+    let a = 1;
+    if (sweepX !== null && q[0] > sweepX) a = 0.3;
+    if (sweepY !== null && q[1] > sweepY) a = 0.3;
+    if (step === 5) a = 0.55;
+    ctx.globalAlpha = a; ctx.fillStyle = ptColor;
+    ctx.beginPath(); ctx.arc(T.X(q[0]), T.Y(q[1]), r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  if (pick === "toy" && step >= 1) {
+    ctx.font = `11px ${C.font}`; ctx.fillStyle = C.muted; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    for (const q of P) ctx.fillText(`(${fn(q[0])}, ${fn(q[1])})`, T.X(q[0]) + 8, T.Y(q[1]) - 4);
+  }
+
+  if (step === 0) {
+    const m = pick === "toy" ? 0.3 : 0.6;
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 1.2; ctx.setLineDash([4, 4]);
+    ctx.strokeRect(T.X(S.x0 - m), T.Y(S.y1 + m), (S.L + 2 * m) * T.s, (S.Wd + 2 * m) * T.s); ctx.setLineDash([]);
+    if (pick !== "toy") tag(`第 ${k} 堆：${P.length} 个点`, T.X(S.x1 + m) + 6, T.Y(S.y1 + m), C.ink, "left", "top");
+  }
+
+  // x overlays
+  const xDone = step > 2 || (step === 2 && p >= 1);
+  if (step === 2 && !xDone) {
+    const scanned = P.filter(q => q[0] <= sweepX);
+    vline(T, sweepX, C.xcol, [], 2.2);
+    if (scanned.length) {
+      const mx = Math.max(...scanned.map(q => q[0]));
+      vline(T, S.x0, C.xcol); tag(`x 最小 ${f2(S.x0)}`, T.X(S.x0) - 4, 26, C.xcol, "right", "top");
+      vline(T, mx, C.xcol, [2, 3]); tag(`目前最大 ${f2(mx)}`, T.X(mx) + 4, 48, C.xcol, "left", "top");
+      ring(T, P[S.ix0], C.xcol);
+    }
+  }
+  if (xDone && step >= 2 && step <= 4) {
+    vline(T, S.x0, C.xcol); vline(T, S.x1, C.xcol);
+    if (step !== 4) { tag(`x 最小 ${f2(S.x0)}`, T.X(S.x0) - 4, 26, C.xcol, "right", "top"); tag(`x 最大 ${f2(S.x1)}`, T.X(S.x1) + 4, 26, C.xcol, "left", "top"); }
+    ring(T, P[S.ix0], C.xcol); ring(T, P[S.ix1], C.xcol);
+    arrowH(T, S.x0, S.x1, T.Y(S.y0) + 26, C.xcol, `长 ${f2(S.L)}`);
+  }
+  // y overlays
+  const yDone = step > 3 || (step === 3 && p >= 1);
+  if (step === 3 && !yDone) {
+    const scanned = P.filter(q => q[1] <= sweepY);
+    hline(T, sweepY, C.ycol, [], 2.2);
+    if (scanned.length) {
+      const my = Math.max(...scanned.map(q => q[1]));
+      hline(T, S.y0, C.ycol); tag(`y 最小 ${f2(S.y0)}`, W - 6, T.Y(S.y0) + 4, C.ycol, "right", "top");
+      hline(T, my, C.ycol, [2, 3]); tag(`目前最大 ${f2(my)}`, W - 6, T.Y(my) - 4, C.ycol, "right", "bottom");
+      ring(T, P[S.iy0], C.ycol);
+    }
+  }
+  if (yDone && step >= 3 && step <= 4) {
+    hline(T, S.y0, C.ycol); hline(T, S.y1, C.ycol);
+    if (step !== 4) { tag(`y 最小 ${f2(S.y0)}`, W - 6, T.Y(S.y0) + 4, C.ycol, "right", "top"); tag(`y 最大 ${f2(S.y1)}`, W - 6, T.Y(S.y1) - 4, C.ycol, "right", "bottom"); }
+    ring(T, P[S.iy0], C.ycol); ring(T, P[S.iy1], C.ycol);
+    arrowV(T, S.y0, S.y1, T.X(S.x1) + 22, C.ycol, `宽 ${f2(S.Wd)}`);
+  }
+  // box
+  if (step >= 4) {
+    const bx = T.X(S.x0), by = T.Y(S.y1), bw = S.L * T.s, bh = S.Wd * T.s;
+    const pb = step === 4 ? (reduce ? 1 : Math.min(1, (now - t0) / 500)) : 1;
+    ctx.globalAlpha = (step === 5 ? 0.35 : 1) * pb;
+    ctx.fillStyle = C.ink; ctx.globalAlpha *= 0.07; ctx.fillRect(bx, by, bw, bh);
+    ctx.globalAlpha = (step === 5 ? 0.35 : 1) * pb;
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 2.2; ctx.strokeRect(bx, by, bw, bh);
+    const X = T.X(S.cx), Y = T.Y(S.cy);
+    ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(X - 9, Y); ctx.lineTo(X + 9, Y); ctx.moveTo(X, Y - 9); ctx.lineTo(X, Y + 9); ctx.stroke();
+    ctx.globalAlpha = 1;
+    if (step === 4) tag(`中心 (${f2(S.cx)}, ${f2(S.cy)})`, X + 12, Y + 12, C.ink, "left", "top");
+  }
+  // nearest / farthest
+  if (step === 5) {
+    const A = P[S.inear], B = P[S.ifar];
+    const pr = reduce ? 1 : Math.min(1, (now - t0) / 900);
+    ctx.strokeStyle = C.warn; ctx.lineWidth = 2; ctx.setLineDash([7, 5]);
+    ctx.beginPath(); ctx.moveTo(T.X(A[0]), T.Y(A[1]));
+    ctx.lineTo(T.X(lerp(A[0], B[0], pr)), T.Y(lerp(A[1], B[1], pr))); ctx.stroke(); ctx.setLineDash([]);
+    ring(T, A, C.warn, 9); ring(T, B, C.warn, 9);
+    tag(`离雷达最近 ${f2(S.dnear)} 米`, T.X(A[0]) - 12, T.Y(A[1]) - 12, C.warn, "right", "bottom");
+    tag(`最远 ${f2(S.dfar)} 米`, T.X(B[0]) + 12, T.Y(B[1]) - 12, C.warn, "left", "bottom");
+    if (pr >= 1) tag(`连线 ${f2(S.seg)} 米（斜线）`, (T.X(A[0]) + T.X(B[0])) / 2, (T.Y(A[1]) + T.Y(B[1])) / 2 + 12, C.warn, "center", "top");
+  }
+  const animating = vt < 1 || (step >= 2 && p < 1) || (step >= 4 && now - t0 < 950);
+  if (animating) requestAnimationFrame(draw);
+}
+
+function kick() { requestAnimationFrame(draw); }
+
+function render(resetView) {
+  const P = pts(), S = stats(P);
+  const T = texts(S, P.length);
+  const ol = document.getElementById("steps");
+  ol.innerHTML = "";
+  T.forEach((t, i) => {
+    const li = document.createElement("li");
+    li.innerHTML = t; li.tabIndex = 0;
+    if (i === step) li.setAttribute("aria-current", "step");
+    li.addEventListener("click", () => go(i));
+    li.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(i); } });
+    ol.appendChild(li);
+  });
+  document.getElementById("readout").innerHTML = T[step];
+  document.getElementById("stepno").textContent = `第 ${step + 1} / ${NSTEP} 步`;
+  document.getElementById("prev").disabled = step === 0;
+  document.getElementById("next").disabled = step === NSTEP - 1;
+  const tv = targetView(S);
+  viewFrom = resetView || !view ? tv : view;
+  viewTo = tv; vt0 = performance.now(); t0 = performance.now();
+  kick();
+}
+function go(i) { step = Math.max(0, Math.min(NSTEP - 1, i)); render(false); }
+
+document.getElementById("prev").addEventListener("click", () => go(step - 1));
+document.getElementById("next").addEventListener("click", () => go(step + 1));
+document.getElementById("replay").addEventListener("click", () => { t0 = performance.now(); if (step === 1) { viewFrom = overView(); vt0 = t0; } kick(); });
+document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
+  pick = b.dataset.pick;
+  document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", String(c === b)));
+  step = 0; render(true);
+}));
+window.addEventListener("resize", resize);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", kick);
+new MutationObserver(kick).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+resize();
+render(true);
+</script>
+
+</body>
+</html>

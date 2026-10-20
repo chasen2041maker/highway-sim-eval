@@ -37,3 +37,22 @@ def cluster_points(points: np.ndarray, eps: float, min_samples: int) -> np.ndarr
     xy = points[:, :2]
     labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(xy)   # 返回每一行的堆号，−1 = 噪声
     return labels
+
+
+def cluster_to_box(points: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """给每一堆点画一个框（从天上往下看，框的四条边和 x、y 轴平行）。
+
+    points：形状 (M, 3)，去完地面后留下的点（和传给 cluster_points 的是同一批）。
+    labels：形状 (M,)，cluster_points 的输出，第 i 个点属于第几堆，−1 = 噪声。
+    返回 boxes：形状 (K, 4) 的小数数组，K = 堆数（噪声不算一堆）；第 k 行是第 k 堆的框：
+        (中心 x, 中心 y, 沿 x 方向的长, 沿 y 方向的宽)，单位米。
+    """
+    boxes = []
+    for k in range(labels.max() + 1):
+        xy = points[labels == k, :2]
+        lo = xy.min(axis=0)
+        hi = xy.max(axis=0)
+        center = (lo + hi) / 2
+        size = hi- lo
+        boxes.append([center[0], center[1], size[0], size[1]])
+    return np.array(boxes)
