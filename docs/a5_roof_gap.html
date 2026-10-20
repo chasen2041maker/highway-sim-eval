@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>车顶上的缝</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one figure card per view (side view, then top view), each with a two-line caption; a takeaway line at the end. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --car: #e07400; --beam: #8d959d; --hit: #1e66d6; --gap: #c4471f; --ground: #e6eaee;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --car: #ffa040; --beam: #6c7883; --hit: #62a6ff; --gap: #ff7a52; --ground: #1f2832; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --car: #ffa040; --beam: #6c7883; --hit: #62a6ff; --gap: #ff7a52; --ground: #1f2832; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 920px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 24px; margin: 0; }
+h2 { font-size: 16px; margin: 0; }
+p { margin: 0; }
+.lede { margin-top: 4px; color: var(--muted); max-width: 70ch; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+.fig { overflow-x: auto; }
+svg { display: block; width: 100%; min-width: 560px; height: auto; }
+svg text { font-family: var(--font-body); font-size: 13px; fill: var(--ink); }
+svg .m { fill: var(--muted); font-size: 12px; }
+svg .n { font-family: var(--font-num); font-size: 12px; fill: var(--muted); }
+.cap { color: var(--muted); font-size: 14px; max-width: 76ch; }
+.take { font-weight: 500; border-left: 3px solid var(--gap); padding-left: 10px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>车顶上的缝</h1>
+    <p class="lede">后车停在我后面，车头朝着我。车头在离我 9.7 米处，车高 1.5 米。为什么它的点会分成两堆？</p>
+  </header>
+
+  <section class="panel" aria-labelledby="h1s">
+    <h2 id="h1s">① 从侧面看（往后看）：只画打到后车附近的 4 根激光</h2>
+    <div class="fig">
+      <svg viewBox="0 0 800 330" role="img" aria-label="侧视图：第 9 根越过整辆车，第 10 根落在车顶 10.67 米处，第 11、12 根打在车头面上">
+        <!-- scale: x metre m -> 30 + 47 m ; z metre -> 92 + 122.8 (-z)  (vertical exaggerated ~2.6x) -->
+        <rect x="0" y="0" width="800" height="330" fill="var(--surface)"/>
+        <rect x="0" y="313.0" width="800" height="17.0" fill="var(--ground)"/>
+        <line x1="0" y1="313.0" x2="800" y2="313.0" stroke="var(--muted)" stroke-width="1.2"/>
+        <text x="792" y="306.0" text-anchor="end" class="m">地面 z = −1.8</text>
+        <g class="n" text-anchor="middle">
+          <text x="30" y="327">0</text><text x="265" y="327">5 m</text><text x="500" y="327">10 m</text><text x="735" y="327">15 m</text>
+        </g>
+        <rect x="485.9" y="128.8" width="216.2" height="184.2" fill="var(--car)" fill-opacity="0.08" stroke="var(--car)" stroke-width="2"/>
+        <text x="594" y="250" text-anchor="middle" style="fill:var(--car)">后车（车头朝我，高 1.5 米）</text>
+        <line x1="30" y1="92" x2="799.9" y2="103.2" stroke="var(--beam)" stroke-width="1.4" stroke-dasharray="6 4"/>
+        <text x="792" y="95.2" text-anchor="end" class="m">第 9 根：整辆车都越过去</text>
+        <line x1="30" y1="92" x2="531.7" y2="128.8" stroke="var(--hit)" stroke-width="2.2"/>
+        <circle cx="531.7" cy="128.8" r="5" fill="var(--hit)"/>
+        <text x="541.7" y="122.8" style="fill:var(--hit)">第 10 根：10.67 米处落在车顶</text>
+        <line x1="30" y1="92" x2="485.9" y2="152.3" stroke="var(--hit)" stroke-width="1.6"/>
+        <circle cx="485.9" cy="152.3" r="4.5" fill="var(--hit)"/>
+        <line x1="30" y1="92" x2="485.9" y2="179.2" stroke="var(--hit)" stroke-width="1.2" stroke-opacity="0.7"/>
+        <circle cx="485.9" cy="179.2" r="4" fill="var(--hit)" fill-opacity="0.8"/>
+        <text x="495.9" y="170.3" class="m">← 第 11 根（打在车头面上）</text>
+        <text x="495.9" y="193.2" class="m">← 第 12 根……</text>
+        <line x1="485.9" y1="118.8" x2="531.7" y2="118.8" stroke="var(--gap)" stroke-width="2"/>
+        <line x1="485.9" y1="113.8" x2="485.9" y2="123.8" stroke="var(--gap)" stroke-width="2"/>
+        <line x1="531.7" y1="113.8" x2="531.7" y2="123.8" stroke="var(--gap)" stroke-width="2"/>
+        <text x="491.9" y="146.8" style="fill:var(--gap)">↑ 这段车顶没有点，约 0.9 米</text>
+        <polygon points="30,84 24,96 36,96" fill="var(--ink)"/>
+        <text x="40" y="80">雷达（离地 1.8 米）</text>
+      </svg>
+    </div>
+    <p class="cap">32 根激光是一根根分开的“切片”，相邻两根差 1.29°。第 10 根刚好从车头上沿擦过去，落到车顶时已经往后走了约 0.9 米；第 11 根又太低，打在车头面上。夹在中间的那段车顶，没有任何一根激光落上去。竖直方向放大了约 2.6 倍。</p>
+  </section>
+
+  <section class="panel" aria-labelledby="h2s">
+    <h2 id="h2s">② 从天上看：DBSCAN 只看得到 x、y</h2>
+    <div class="fig">
+      <svg viewBox="0 0 800 230" role="img" aria-label="俯视图：车头面的点排成一条线，车顶的点排成另一条线，中间隔 0.9 米；半径 0.5 米的圈够不着，1.0 米的圈够得着">
+        <!-- scale: x metre 8.5..12.5 -> 40..760 (180 px/m); y metre -0.9..1.4 -> 200..20 -->
+        <rect x="0" y="0" width="800" height="230" fill="var(--surface)"/>
+        <rect x="256" y="20" width="514" height="180" fill="var(--car)" fill-opacity="0.06" stroke="var(--car)" stroke-dasharray="5 4"/>
+        <text x="764" y="38" text-anchor="end" style="fill:var(--car)">后车的位置（算法看不到）</text>
+        <!-- face points: x=9.7, many, stacked -->
+        <g fill="var(--hit)">
+          <circle cx="256" cy="40" r="4"/><circle cx="256" cy="62" r="4"/><circle cx="256" cy="84" r="4"/><circle cx="256" cy="106" r="4"/>
+          <circle cx="256" cy="128" r="4"/><circle cx="256" cy="150" r="4"/><circle cx="256" cy="172" r="4"/><circle cx="256" cy="194" r="4"/>
+        </g>
+        <text x="246" y="216" text-anchor="end" class="m">车头面：152 个点叠成一条线（x ≈ 9.7）</text>
+        <!-- roof points: x=10.67 -->
+        <g fill="var(--hit)" fill-opacity="0.6">
+          <circle cx="430" cy="48" r="4"/><circle cx="430" cy="78" r="4"/><circle cx="430" cy="108" r="4"/><circle cx="430" cy="138" r="4"/><circle cx="430" cy="168" r="4"/>
+        </g>
+        <text x="440" y="216" class="m">车顶：25 个点（x ≈ 10.7）</text>
+        <!-- eps circles around a face point (256,106) -->
+        <circle cx="256" cy="106" r="90" fill="none" stroke="var(--gap)" stroke-width="1.6" stroke-dasharray="5 4"/>
+        <circle cx="256" cy="106" r="180" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="2 4"/>
+        <text x="300" y="60" style="fill:var(--gap)">eps 0.5：够不着</text>
+        <text x="470" y="96">eps 1.0：够得着</text>
+        <!-- gap bracket -->
+        <line x1="256" y1="12" x2="430" y2="12" stroke="var(--gap)" stroke-width="2"/>
+        <text x="343" y="28" text-anchor="middle" class="n" style="fill:var(--gap)">≈ 0.9 m</text>
+      </svg>
+    </div>
+    <p class="cap">从天上往下看，车头面上不同高度的点都压在同一条线上；车顶那一条在它后面约 0.9 米（最近的一对点隔 0.86 米）。DBSCAN 只知道“点挨不挨着”，不知道它们是同一辆车。（左右方向只是示意，没按比例。）</p>
+  </section>
+
+  <p class="take">所以不是车真有两个，而是激光一根一根地扫，同一辆车身上没被扫到的地方，在点云里就成了一条缝。eps 比这条缝窄，车就被切成两块。离得越远，相邻两根激光隔得越开，缝也越宽。</p>
+</div>
+
+</body>
+</html>

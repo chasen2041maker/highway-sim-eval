@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import numpy as np
+from sklearn.cluster import DBSCAN
 
 
 def remove_ground(points: np.ndarray, z_threshold: float) -> tuple[np.ndarray, np.ndarray]:
@@ -22,3 +23,17 @@ def remove_ground(points: np.ndarray, z_threshold: float) -> tuple[np.ndarray, n
     z = points[:,2]     # 取出所有点的第 3 列（z），N 个数
     keep = z > z_threshold      # 每个点和 -1.0 比一比，得到 N 个 True / False
     return points[keep], keep
+
+
+def cluster_points(points: np.ndarray, eps: float, min_samples: int) -> np.ndarray:
+    """把挨得近的点归成一堆（DBSCAN；从天上往下看，只用 x、y 两列）。
+
+    points：形状 (M, 3)，去完地面后留下的点。
+    eps：两个点相距不超过 eps 米，就算“挨着”。
+    min_samples：一个点的 eps 圈里（算上它自己）至少有这么多个点，它才算“核心点”，能把圈里的点拉进同一堆。
+    返回 labels：形状 (M,) 的整数，第 i 个点属于第几堆（0, 1, 2, …），−1 = 噪声（哪堆都不算）。
+    """
+    # 本人敲（3 行）：取出 x、y 两列 → 用参数 eps、min_samples 调 DBSCAN → return 每个点的堆号
+    xy = points[:, :2]
+    labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(xy)   # 返回每一行的堆号，−1 = 噪声
+    return labels

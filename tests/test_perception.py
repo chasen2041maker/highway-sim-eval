@@ -28,3 +28,20 @@ def test_fake_scan_threshold_1cm_lets_ground_noise_through():
     points, labels = scan()
     _, keep = remove_ground(points, -1.79)
     assert int(((labels == -1) & keep).sum()) == 1069
+
+
+def test_cluster_two_groups_and_one_lonely_point():
+    """两团各 3 个点（团内相距 0.1 米）、一个孤零零的点：eps 0.5、min_samples 3 → 两堆 + 1 个噪声。"""
+    from ads.perception import cluster_points
+    pts = np.array([[0, 0, 0], [0.1, 0, 0], [0.2, 0, 0], [5, 5, 0], [5.1, 5, 0], [5.2, 5, 0], [20, 0, 0]], dtype=float)
+    labels = cluster_points(pts, 0.5, 3)
+    assert labels[0] == labels[1] == labels[2] != labels[3] == labels[4] == labels[5]
+    assert labels[6] == -1
+
+
+def test_fake_scan_eps_window():
+    """假雷达去地面后 650 个点，min_samples 5：eps 0.5 → 8 堆（车被切碎）、1.0 → 5 堆（正好）、5.0 → 4 堆（前车和路边停车粘一起）。"""
+    from ads.perception import cluster_points
+    points, _ = scan()
+    kept, _ = remove_ground(points, -1.6)
+    assert [int(cluster_points(kept, e, 5).max()) + 1 for e in (0.5, 1.0, 5.0)] == [8, 5, 4]

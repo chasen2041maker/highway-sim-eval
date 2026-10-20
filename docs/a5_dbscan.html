@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>DBSCAN 怎么分堆</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: rules on the left of a wide top-view canvas on desktop (stacked on phones); sliders and step buttons under the canvas; one readout line that names clusters, noise and the clicked point. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --accent: #1e66d6; --accent-ink: #ffffff; --grid: #e6eaee; --noise: #1b222a; --ring: #1e66d6;
+  --c0: #2a78d6; --c1: #d23b3b; --c2: #1a9a6c; --c3: #9a3fc4; --c4: #d96f00; --c5: #0f8b8d; --c6: #c2185b; --c7: #7a5c00;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --accent: #62a6ff; --accent-ink: #11161b; --grid: #222b34; --noise: #e5eaf0; --ring: #62a6ff;
+    --c0: #5aa2ff; --c1: #ff6b6b; --c2: #3fd29a; --c3: #c77dff; --c4: #ffa040; --c5: #3cc8c9; --c6: #ff6fa5; --c7: #d9b84a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --accent: #62a6ff; --accent-ink: #11161b; --grid: #222b34; --noise: #e5eaf0; --ring: #62a6ff;
+  --c0: #5aa2ff; --c1: #ff6b6b; --c2: #3fd29a; --c3: #c77dff; --c4: #ffa040; --c5: #3cc8c9; --c6: #ff6fa5; --c7: #d9b84a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; }
+p { margin: 0; }
+.lede { margin-top: 4px; color: var(--muted); max-width: 72ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.rules { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; font-size: 14.5px; }
+.rules b { font-weight: 700; }
+.io { font-size: 14px; color: var(--muted); }
+.io code, .readout code { font-family: var(--font-num); font-size: 13px; }
+canvas { display: block; width: 100%; border-radius: 6px; cursor: crosshair; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; font-size: 14px; }
+.controls label { display: flex; gap: 8px; align-items: center; }
+input[type="range"] { width: min(220px, 60vw); accent-color: var(--accent); }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
+button {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--chip); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.readout { background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 14.5px; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>DBSCAN 怎么分堆</h1>
+    <p class="lede">从天上往下看的一小块路面，点是去完地面后剩下的雷达点（示意数据，不是你那一帧）。拖动两个滑块，看点怎么被分成一堆一堆；点一下任意一个点，看它的圈。</p>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-labelledby="h-rules">
+      <h2 id="h-rules">三条规则</h2>
+      <ol class="rules">
+        <li>以每个点为圆心，画一个半径 <b>eps</b> 米的圈。圈里（算上它自己）至少有 <b>min_samples</b> 个点，它就是<b>核心点</b>。</li>
+        <li>核心点把圈里的点都拉进自己这一堆。被拉进来的点如果也是核心点，就接着往外拉，像传话一样一路传下去。</li>
+        <li>谁也拉不到的点，算<b>噪声</b>，堆号是 <code>−1</code>。</li>
+      </ol>
+      <p class="io">输入：每个点的 (x, y)。输出：每个点一个堆号 <code>0, 1, 2, …</code>，噪声是 <code>−1</code>。事先不用告诉它有几堆。</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-play">
+      <h2 id="h-play">自己拖拖看</h2>
+      <canvas id="cv" aria-label="俯视图：示意点和分堆结果"></canvas>
+      <div class="key">
+        <span><i class="sw" style="background:var(--c0)"></i>同一个颜色 = 同一堆</span>
+        <span><i class="sw" style="background:var(--noise)"></i>小叉 = 噪声</span>
+        <span>大点 = 核心点，小点 = 被拉进来的边缘点</span>
+        <span>虚线框 = 真东西的位置（算法看不到）</span>
+      </div>
+      <div class="controls">
+        <label for="eps">eps <input id="eps" type="range" min="0.2" max="4" step="0.1" value="0.5"> <span class="num" id="epsV"></span> 米</label>
+        <label for="ms">min_samples <input id="ms" type="range" min="2" max="10" step="1" value="4"> <span class="num" id="msV"></span> 个</label>
+      </div>
+      <div class="controls">
+        <button id="step" class="primary" type="button">▶ 一步一步分堆</button>
+        <button id="all" type="button">直接看结果</button>
+        <span>试试：</span>
+        <button type="button" data-eps="0.5">eps 0.5</button>
+        <button type="button" data-eps="1.0">eps 1.0</button>
+        <button type="button" data-eps="3.0">eps 3.0</button>
+      </div>
+      <div class="readout" id="readout" aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---- toy scene (metres, x forward, y left) -------------------------------------------
+  const pts = [], truth = [];
+  const add = (x, y, k) => { pts.push([x, y]); truth.push(k); };
+  // near car straight ahead: rear face (dense) + a short arc of roof hits 0.8 m behind it
+  for (let y = -0.9; y <= 0.901; y += 0.12) add(10, y, 0);
+  for (let y = -0.75; y <= 0.76; y += 0.25) add(10.8 + 0.05 * Math.cos(y * 3), y, 0);
+  // parked car on the right: side face + rear face (an "L")
+  for (let x = 6; x <= 10.01; x += 0.2) add(x, -3.6, 1);
+  for (let y = -3.8; y >= -5.41; y -= 0.2) add(6, y, 1);
+  // pedestrian on the left
+  [[12, 5], [12.15, 5.1], [11.9, 5.15], [12.1, 4.85], [11.95, 4.95], [12.2, 4.95], [12.05, 5.25], [11.85, 4.85]].forEach(([x, y]) => add(x, y, 2));
+  // far car in the left lane: few points, far apart
+  for (let y = 2.6; y <= 4.41; y += 0.3) add(22, y, 3);
+  // stray points
+  [[16, -2], [24.5, -5.5], [4, 6]].forEach(([x, y]) => add(x, y, -1));
+  const BOXES = [
+    { name: "前车", x0: 10, x1: 14.6, y0: -0.95, y1: 0.95 },
+    { name: "右边停的车", x0: 6, x1: 10.4, y0: -5.4, y1: -3.6 },
+    { name: "行人", x0: 11.7, x1: 12.3, y0: 4.7, y1: 5.3 },
+    { name: "左车道远处的车", x0: 22, x1: 26.6, y0: 2.55, y1: 4.45 },
+  ];
+  const N = pts.length;
+
+  // ---- DBSCAN with an event log so we can replay it ------------------------------------
+  function dbscan(eps, minS) {
+    const nb = pts.map((p) => { const out = []; for (let j = 0; j < N; j++) if (Math.hypot(p[0] - pts[j][0], p[1] - pts[j][1]) <= eps + 1e-9) out.push(j); return out; });
+    const core = nb.map((l) => l.length >= minS);
+    const lab = new Array(N).fill(-2);           // -2 = not visited yet
+    const events = [];                            // {i, c, from}
+    let c = 0;
+    for (let i = 0; i < N; i++) {
+      if (lab[i] !== -2 || !core[i]) continue;
+      lab[i] = c; events.push({ i, c, from: -1 });
+      const queue = [i];
+      while (queue.length) {
+        const q = queue.shift();
+        if (!core[q]) continue;
+        for (const j of nb[q]) {
+          if (lab[j] === -2 || lab[j] === -1) {
+            const was = lab[j]; lab[j] = c; events.push({ i: j, c, from: q });
+            if (was === -2 && core[j]) queue.push(j);
+          }
+        }
+      }
+      c++;
+    }
+    for (let i = 0; i < N; i++) if (lab[i] === -2) lab[i] = -1;
+    return { lab, core, nb, events, n: c };
+  }
+
+  // ---- drawing ------------------------------------------------------------------------
+  const cv = document.getElementById("cv");
+  const $ = (id) => document.getElementById(id);
+  const X0 = -1, X1 = 27, Y0 = -7, Y1 = 7;
+  let res = null, shown = Infinity, picked = -1, timer = null, S = 1, W = 0, H = 0;
+  const X = (x) => (x - X0) * S, Y = (y) => (Y1 - y) * S;
+  const tok = () => { const s = getComputedStyle(document.documentElement); const g = (n) => s.getPropertyValue(n).trim();
+    return { surface: g("--surface"), ink: g("--ink"), muted: g("--muted"), grid: g("--grid"), noise: g("--noise"), ring: g("--ring"), line: g("--line"),
+             c: [0, 1, 2, 3, 4, 5, 6, 7].map((k) => g("--c" + k)), num: g("--font-num"), body: g("--font-body") }; };
+
+  function resize() {
+    W = cv.parentElement.clientWidth - 32; S = W / (X1 - X0); H = Math.round((Y1 - Y0) * S);
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + "px";
+    cv.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function draw() {
+    const T = tok(), ctx = cv.getContext("2d"), small = W < 560;
+    ctx.fillStyle = T.surface; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = T.grid; ctx.lineWidth = 1;
+    for (let x = 0; x <= X1; x += 1) { ctx.beginPath(); ctx.moveTo(X(x), 0); ctx.lineTo(X(x), H); ctx.stroke(); }
+    for (let y = Y0; y <= Y1; y += 1) { ctx.beginPath(); ctx.moveTo(0, Y(y)); ctx.lineTo(W, Y(y)); ctx.stroke(); }
+    ctx.font = `${small ? 10 : 12}px ${T.body}`; ctx.textBaseline = "bottom";
+    BOXES.forEach((b) => {
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = T.muted; ctx.globalAlpha = 0.6;
+      ctx.strokeRect(X(b.x0), Y(b.y1), (b.x1 - b.x0) * S, (b.y1 - b.y0) * S); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.fillStyle = T.muted; ctx.textAlign = "left"; ctx.fillText(b.name, X(b.x0), Y(b.y1) - 2);
+    });
+    // lidar
+    ctx.fillStyle = T.ink; ctx.beginPath(); ctx.moveTo(X(0) + 8, Y(0)); ctx.lineTo(X(0) - 5, Y(0) - 6); ctx.lineTo(X(0) - 5, Y(0) + 6); ctx.closePath(); ctx.fill();
+    ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText("雷达", X(0) + 11, Y(0));
+    // assigned so far
+    const lab = new Array(N).fill(-2);
+    const evs = res.events.slice(0, Math.min(shown, res.events.length));
+    evs.forEach((e) => { lab[e.i] = e.c; });
+    const done = shown >= res.events.length;
+    const cur = !done && evs.length ? evs[evs.length - 1] : null;
+    if (cur) {        // the circle of the point that is pulling right now
+      const p = pts[cur.from >= 0 ? cur.from : cur.i];
+      ctx.strokeStyle = T.ring; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), +$("eps").value * S, 0, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+    }
+    for (let i = 0; i < N; i++) {
+      const [x, y] = pts[i], l = lab[i];
+      if (l >= 0) {
+        ctx.fillStyle = T.c[l % 8];
+        ctx.beginPath(); ctx.arc(X(x), Y(y), res.core[i] ? (small ? 3.2 : 4.2) : (small ? 2 : 2.6), 0, 2 * Math.PI); ctx.fill();
+      } else if (done) {       // noise
+        const r = small ? 3 : 4; ctx.strokeStyle = T.noise; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(X(x) - r, Y(y) - r); ctx.lineTo(X(x) + r, Y(y) + r); ctx.moveTo(X(x) + r, Y(y) - r); ctx.lineTo(X(x) - r, Y(y) + r); ctx.stroke();
+      } else {                 // not visited yet
+        ctx.fillStyle = T.muted; ctx.globalAlpha = 0.45;
+        ctx.beginPath(); ctx.arc(X(x), Y(y), small ? 2 : 2.6, 0, 2 * Math.PI); ctx.fill(); ctx.globalAlpha = 1;
+      }
+    }
+    if (picked >= 0) {
+      const p = pts[picked];
+      ctx.strokeStyle = T.ink; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), +$("eps").value * S, 0, 2 * Math.PI); ctx.stroke();
+      ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 6, 0, 2 * Math.PI); ctx.stroke();
+    }
+    // scale bar
+    ctx.strokeStyle = T.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X(0), Y(-6.4)); ctx.lineTo(X(2), Y(-6.4)); ctx.stroke();
+    ctx.fillStyle = T.ink; ctx.textBaseline = "bottom"; ctx.font = `${small ? 10 : 12}px ${T.num}`; ctx.fillText("2 米", X(0), Y(-6.4) - 3);
+    readout(done);
+  }
+
+  function readout(done) {
+    const eps = +$("eps").value, ms = +$("ms").value;
+    let html = "";
+    if (!done) {
+      const evs = res.events.slice(0, shown);
+      const cur = evs[evs.length - 1];
+      html = cur ? (cur.from < 0 ? `第 ${cur.c} 堆开张：找到一个核心点（圈里有 <span class="num">${res.nb[cur.i].length}</span> 个点 ≥ ${ms}）。`
+                                 : `第 ${cur.c} 堆往外拉：虚线圈里的点被拉进来${res.core[cur.i] ? "，它也是核心点，会接着往外拉" : "，它不是核心点，拉到它就停"}。`)
+                 : "还没开始。";
+    } else {
+      const noise = res.lab.filter((l) => l === -1).length;
+      const per = BOXES.map((b, k) => { const s = new Set(); res.lab.forEach((l, i) => { if (truth[i] === k && l >= 0) s.add(l); }); return s.size; });
+      const owners = []; for (let c = 0; c < res.n; c++) { const s = new Set(); res.lab.forEach((l, i) => { if (l === c && truth[i] >= 0) s.add(truth[i]); }); owners.push(s.size); }
+      const split = BOXES.filter((b, k) => per[k] > 1).map((b) => b.name);
+      const merged = owners.filter((n) => n > 1).length;
+      const lost = BOXES.filter((b, k) => per[k] === 0).map((b) => b.name);
+      html = `eps = <span class="num">${eps.toFixed(1)}</span> 米、min_samples = <span class="num">${ms}</span>：分成 <span class="num">${res.n}</span> 堆，噪声 <span class="num">${noise}</span> 个。` +
+        (split.length ? ` 被切碎的：${split.join("、")}。` : "") + (lost.length ? ` 整个被当成噪声的：${lost.join("、")}。` : "") +
+        (merged ? ` 有 ${merged} 堆里粘了两个东西。` : "") + (!split.length && !merged && !lost.length ? " 4 个东西各成一堆，正好。" : "");
+    }
+    if (picked >= 0) {
+      const n = res.nb[picked].length;
+      html += `<br>你点的这个点：圈里有 <span class="num">${n}</span> 个点（算上自己），${n >= ms ? "是核心点" : `不到 ${ms} 个，不是核心点`}${res.lab[picked] === -1 ? "，也没被谁拉进去，是噪声" : ""}。`;
+    }
+    $("readout").innerHTML = html;
+  }
+
+  function recompute() {
+    $("epsV").textContent = (+$("eps").value).toFixed(1); $("msV").textContent = $("ms").value;
+    res = dbscan(+$("eps").value, +$("ms").value);
+    stop(); shown = Infinity; draw();
+  }
+  function stop() { if (timer) { clearInterval(timer); timer = null; } $("step").textContent = "▶ 一步一步分堆"; }
+
+  $("eps").addEventListener("input", recompute);
+  $("ms").addEventListener("input", recompute);
+  $("all").addEventListener("click", () => { stop(); shown = Infinity; draw(); });
+  $("step").addEventListener("click", () => {
+    if (timer) { stop(); return; }
+    if (shown >= res.events.length) shown = 0;
+    $("step").textContent = "⏸ 暂停";
+    timer = setInterval(() => { shown++; draw(); if (shown >= res.events.length) stop(); }, 140);
+  });
+  document.querySelectorAll("[data-eps]").forEach((b) => b.addEventListener("click", () => { $("eps").value = b.dataset.eps; recompute(); }));
+  cv.addEventListener("click", (e) => {
+    const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / S + X0, y = Y1 - (e.clientY - r.top) / S;
+    let best = -1, bd = 1e9; pts.forEach((p, i) => { const d = Math.hypot(p[0] - x, p[1] - y); if (d < bd) { bd = d; best = i; } });
+    picked = bd < 0.8 ? best : -1; draw();
+  });
+  let rT; window.addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(() => { resize(); draw(); }, 80); });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+  new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  resize(); recompute();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+})();
+</script>
+
+</body>
+</html>
