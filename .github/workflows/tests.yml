@@ -1,0 +1,26 @@
+# CI（持续集成）：每次 push 到 GitHub，GitHub 借一台全新的 Ubuntu 电脑，
+# 照下面的步骤从零下载代码、装 Python、装依赖、跑全部测试。
+# 结果显示在仓库的 Actions 页面；README 的 Tests 徽章跟着变绿 / 变红。
+name: tests
+
+# 块 1：什么时候跑
+on:
+  push:                       # 你每次 git push 时
+    branches: [main]
+  pull_request:               # 别人给你提合并请求（pull request）时
+
+# 块 2：在什么电脑上跑
+jobs:
+  test:
+    runs-on: ubuntu-latest    # GitHub 免费借的 Linux 电脑，每次都是全新的，什么包都没装
+
+    # 块 3：一步一步做什么
+    steps:
+      - uses: actions/checkout@v4          # 第 1 步：把仓库代码下载到这台电脑
+      - uses: actions/setup-python@v5      # 第 2 步：装 Python
+        with:
+          python-version: "3.10"
+      - name: Install dependencies         # 第 3 步：装依赖
+        run: python -m pip install -r requirements.txt pytest
+      - name: Run tests                    # 第 4 步：跑测试
+        run: python -m pytest -q
