@@ -8,7 +8,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CARLA](https://img.shields.io/badge/CARLA-0.9.16-1f6feb)](https://carla.org/)
-[![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](#快速开始)
+[![tests](https://github.com/chasen2041maker/highway-sim-eval/actions/workflows/tests.yml/badge.svg)](https://github.com/chasen2041maker/highway-sim-eval/actions/workflows/tests.yml)
 [![Status](https://img.shields.io/badge/status-active%20development-eb6834)](#路线图)
 [![Explainers](https://img.shields.io/badge/demo-interactive%20explainers-1e66d6)](https://chasen2041maker.github.io/highway-sim-eval/)
 
@@ -32,7 +32,7 @@ A modular driving stack written from scratch and run closed-loop in CARLA 0.9.16
 | Ground removal on slopes | Flat height threshold vs RANSAC ground-plane fitting | On a 4% upgrade the flat cut leaks 3,371 road points (24 clusters, precision 0.04); RANSAC leaks 0 and restores 5 clusters |
 | Detection evaluation | Greedy one-to-one matching on center distance; recall, precision, mean center error | Recall 0.40 / 0.60 / 1.00 at the nuScenes gates 0.5 / 2 / 4 m |
 
-52 unit tests, with expected values computed by hand. Every experiment has a step-by-step explainer: **[interactive explainers](https://chasen2041maker.github.io/highway-sim-eval/)**.
+52 unit tests, with expected values computed by hand, run by GitHub Actions on every push (Python 3.10, dependencies pinned in `requirements.txt`). Every experiment has a step-by-step explainer: **[interactive explainers](https://chasen2041maker.github.io/highway-sim-eval/)**.
 
 <sub>The rest of this README is in Chinese. 下面是中文说明。</sub>
 
@@ -115,9 +115,10 @@ flowchart LR
 ```powershell
 git clone https://github.com/chasen2041maker/highway-sim-eval.git
 cd highway-sim-eval
-python -m pip install carla==0.9.16 pytest matplotlib
+python -m pip install -r requirements.txt pytest   # 依赖清单（CI 也只装这些）
+python -m pip install carla==0.9.16 matplotlib      # 接 CARLA、画图时再装
 
-python -m pytest -q        # 单元测试，纯 Python，不需要启动 CARLA
+python -m pytest -q        # 单元测试，纯 Python，不需要启动 CARLA；每次 push 由 GitHub Actions 自动跑
 ```
 
 **接入 CARLA**：先启动服务器，再在另一个终端运行示例。
