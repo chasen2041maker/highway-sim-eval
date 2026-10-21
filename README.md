@@ -4,15 +4,15 @@
 
 **A driving stack I'm writing from scratch, run closed-loop in CARLA, with an evaluation layer on top.**
 
-**从零手写的驾驶系统，放进 CARLA 闭环仿真，上面再搭一层评测。**
+**English** · [简体中文](README.zh-CN.md)
 
 [![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![CARLA](https://img.shields.io/badge/CARLA-0.9.16-1f6feb)](https://carla.org/)
 [![tests](https://github.com/chasen2041maker/highway-sim-eval/actions/workflows/tests.yml/badge.svg)](https://github.com/chasen2041maker/highway-sim-eval/actions/workflows/tests.yml)
-[![Status](https://img.shields.io/badge/status-active%20development-eb6834)](#roadmap--路线图)
+[![Status](https://img.shields.io/badge/status-active%20development-eb6834)](#roadmap)
 [![Explainers](https://img.shields.io/badge/demo-interactive%20explainers-1e66d6)](https://chasen2041maker.github.io/highway-sim-eval/)
 
-[Explainers 动画讲解](https://chasen2041maker.github.io/highway-sim-eval/) · [What I found 发现](#what-ive-found-so-far--目前的发现) · [Quick start 快速开始](#quick-start--快速开始) · [Roadmap 路线图](#roadmap--路线图)
+[Interactive explainers](https://chasen2041maker.github.io/highway-sim-eval/) · [What I've found](#what-ive-found-so-far) · [Quick start](#quick-start) · [Roadmap](#roadmap)
 
 </div>
 
@@ -22,41 +22,30 @@
   <img src="docs/images/hero_slope.png" width="100%" alt="Simulated 32-beam LiDAR on a 4% upgrade: a flat height cut flags 3,371 road points as obstacles; a RANSAC ground plane flags none">
 </p>
 
-<p align="center">Same LiDAR frame on a 4% upgrade. Left: cutting the ground at a fixed height turns 3,371 road points into obstacles. Right: fit the road with RANSAC first, then cut 0.2 m above it.<br>
-同一帧激光雷达、4% 的上坡。左：按固定高度切地面，3371 个路面点被当成障碍物；右：先用 RANSAC 拟合出路面，再在它上方 0.2 米切。<br>
-<a href="https://chasen2041maker.github.io/highway-sim-eval/a5_slope_ground.html">Step through it in 3D · 3D 分步动画</a></p>
+<p align="center">The same LiDAR frame on a 4% upgrade. Left: cutting the ground at a fixed height turns 3,371 road points into obstacles. Right: fit the road with RANSAC first, then cut 0.2 m above it. <a href="https://chasen2041maker.github.io/highway-sim-eval/a5_slope_ground.html">Step through it in 3D</a></p>
 
-## Why I'm building this · 为什么做这个
+## Why I'm building this
 
 I'm a backend and AI-agent engineer moving into autonomous driving. Reading about driving stacks didn't stick, so I'm writing one, one module at a time, and checking every module against the simulator's ground truth. The question I keep asking is the one simulation and evaluation teams ask every day: when a metric says the car drove well, can I trust that number?
 
-我是做后端和 AI Agent 的工程师，正在转向自动驾驶。光看资料记不住，所以我自己写一套驾驶系统：一次写一个模块，每个模块都拿仿真器里的真值来对。我一直在问的，也是仿真评测团队每天在问的：指标说车开得好，这个数字能信吗？
+The project is built to answer:
 
-Questions the project is built to answer · 这个项目要回答的问题：
+- Which driving stack is safer, smoother and faster on the same set of scenarios?
+- When it fails, what happened just before?
+- After a change, did it really get better, or were the scenarios just easier?
+- Do open-loop metrics agree with how the car actually drives closed-loop?
 
-- Which driving stack is safer, smoother and faster on the same set of scenarios? 同一组场景下，哪套驾驶系统更安全、更顺、更高效？
-- When it fails, what happened just before? 它在什么情况下失败，失败前发生了什么？
-- After a change, did it really get better, or were the scenarios just easier? 改完以后是真的变好了，还是这次的场景更容易？
-- Do open-loop metrics agree with how the car actually drives closed-loop? 开环指标和真的开起来的表现一致吗？
-
-## What I've found so far · 目前的发现
+## What I've found so far
 
 - **The metric was wrong before the controller was.** Measuring lane error as "distance to the nearest waypoint" hid up to 0.25 m of error at 0.5 m waypoint spacing, so I replaced it with point-to-segment distance before tuning anything.
-  **先错的是尺子，不是控制器。**用“到最近路点的距离”量偏离车道，路点隔 0.5 米时会藏住最多 0.25 米的误差，所以调参之前先把指标换成了点到线段的距离。
-- **Integral windup is real in CARLA.** Holding 8 m/s, plain PI overshot to 9.46 m/s. Anti-windup brought the peak down to 8.27 m/s, and 8.11 m/s after raising the integral gain.
-  **积分饱和在 CARLA 里真会出现。**目标 8 m/s，普通 PI 冲到 9.46 m/s；加了防积分饱和降到 8.27 m/s，再把积分系数调大到 0.5，最高 8.11 m/s。
+- **Integral windup is real in CARLA.** Holding 8 m/s, plain PI overshot to 9.46 m/s. Anti-windup brought the peak down to 8.27 m/s, and to 8.11 m/s after raising the integral gain to 0.5.
 - **"Zero acceleration" is not "zero pedal".** Sending IDM's acceleration straight to the pedals left a 6.26 m gap behind a braking car, because the car slowed on its own whenever IDM asked for zero. Closing the loop with a speed PID gave 4.91 m, matching the pure model's 4.95 m.
-  **“加速度为 0”不等于“踏板为 0”。**把 IDM 的加速度直接当踏板，IDM 要“0”的时候车自己就在减速，前车急刹时最小车距 6.26 米；加一层车速 PID 闭环后是 4.91 米，和纯模型的 4.95 米对得上。
 - **The LiDAR box for the car ahead is 2.30 m short.** Only its rear face is visible, so a min/max box sits on the bumper. No clustering setting fixes it; the distance to the bumper (12.70 m) is still right.
-  **前车的激光雷达框中心近了 2.30 米。**雷达只看得到车尾，min / max 框就贴在保险杠上，怎么调聚类参数都没用；不过到车尾的距离（12.70 米）是准的。
-- **A 4% slope breaks a fixed ground cut.** 3,371 road points from 5 m ahead became obstacles, and detection precision fell to 0.04. A RANSAC ground plane fixed it (see the image above).
-  **4% 的坡就能让固定高度去地面失效。**前方 5 米以外 3371 个路面点变成障碍物，检测精确率掉到 0.04；用 RANSAC 拟合地面后恢复（见上图）。
+- **A 4% slope breaks a fixed ground cut.** 3,371 road points from 5 m ahead became obstacles and detection precision fell to 0.04. A RANSAC ground plane fixed it (image above).
 - **Differencing two LiDAR frames is a bad speedometer.** With ±0.2 m range noise at 10 Hz, the speed of the car ahead was off by up to 5.5 m/s. A Kalman filter is next.
-  **相邻两帧相减算车速很不靠谱。**每帧距离误差 ±0.2 米、一秒 10 帧，前车车速最多算错 5.5 m/s。下一步是卡尔曼滤波。
-- **CI caught me on day one.** The first GitHub Actions run failed because scikit-learn was missing from `requirements.txt`; it had only ever worked on my laptop.
-  **CI 第一天就抓到我。**GitHub Actions 第一次跑就红了：`requirements.txt` 里漏了 scikit-learn，之前只在我自己电脑上能跑。
+- **CI caught me on day one.** The first GitHub Actions run failed because scikit-learn was missing from `requirements.txt`. It had only ever worked on my laptop.
 
-## At a glance · 模块一览
+## At a glance
 
 | Module | What it does | Result | Status |
 | --- | --- | --- | --- |
@@ -67,41 +56,41 @@ Questions the project is built to answer · 这个项目要回答的问题：
 | Evaluation metric | Point-to-segment lateral error | Nearest-waypoint distance hid up to 0.25 m | Done |
 | LiDAR perception | Ground removal (height cut, RANSAC on slopes), DBSCAN, boxes on a simulated 32-beam scan | Lead car box 2.30 m short (rear face only); slope: 3,371 → 0 false ground points | Done on the simulated LiDAR |
 | Detection evaluation | Greedy one-to-one matching on center distance; recall, precision, center error | Recall 0.40 / 0.60 / 1.00 at nuScenes gates 0.5 / 2 / 4 m | Done |
-| Tracking | Speed from LiDAR distances; Kalman filter + Hungarian matching next | Frame differencing: up to 5.5 m/s speed error | In progress |
+| Tracking | Speed from LiDAR distances; Kalman filter and Hungarian matching next | Frame differencing: up to 5.5 m/s speed error | In progress |
 
-54 unit tests with expected values worked out by hand, run by GitHub Actions on every push. 54 个单元测试，期望值先手算，每次 push 由 GitHub Actions 自动跑。
+54 unit tests, with expected values worked out by hand, run by GitHub Actions on every push.
 
-## Architecture · 系统架构
+## Architecture
 
 ```mermaid
 flowchart LR
-    CARLA[("CARLA 0.9.16<br/>服务器")]
+    CARLA[("CARLA 0.9.16<br/>server")]
 
-    subgraph SIM["sim/ 仿真接入"]
-        C["CarlaSim<br/>同步模式 · 固定步长"]
-        T["transforms<br/>坐标系转换"]
-        R["recorder<br/>传感器录制"]
+    subgraph SIM["sim/ simulator access"]
+        C["CarlaSim<br/>synchronous · fixed step"]
+        T["transforms<br/>coordinate frames"]
+        R["recorder<br/>sensor logging"]
     end
 
-    subgraph ADS["ads/ 驾驶栈"]
-        P["感知<br/>激光雷达聚类"]
-        K["跟踪<br/>卡尔曼 + 匈牙利"]
-        PL["规划<br/>Frenet 轨迹"]
-        CT["控制<br/>PID · Pure Pursuit"]
-        V["车辆模型<br/>运动学自行车"]
+    subgraph ADS["ads/ driving stack"]
+        P["perception<br/>LiDAR clustering"]
+        K["tracking<br/>Kalman + Hungarian"]
+        PL["planning<br/>Frenet trajectories"]
+        CT["control<br/>PID · Pure Pursuit"]
+        V["vehicle model<br/>kinematic bicycle"]
     end
 
-    subgraph EVAL["evaluation/ 评测"]
-        S["参数化场景库"]
-        M["指标 · 回归报告"]
+    subgraph EVAL["evaluation/"]
+        S["parametric scenarios"]
+        M["metrics · regression reports"]
     end
 
     CARLA <--> C
     C --> T --> P --> K --> PL --> CT --> C
-    V -. 离线验证 .- CT
+    V -. offline checks .- CT
     S --> C
     C --> M
-    R --> MINE["mining/<br/>VLM 打标 · 场景检索"] --> L["learning/<br/>闭环训练"]
+    R --> MINE["mining/<br/>VLM labels · scenario search"] --> L["learning/<br/>closed-loop training"]
 
     style SIM fill:#fbfbfa,stroke:#d6d4ce,color:#52514e
     style ADS fill:#fbfbfa,stroke:#d6d4ce,color:#52514e
@@ -114,187 +103,188 @@ flowchart LR
     class R,PL,S,M,MINE,L todo
 ```
 
-蓝色 = 已完成 · 橙色 = 进行中 · 灰色虚线 = 计划中（Blue = done, orange = in progress, dashed grey = planned）
+Blue = done · orange = in progress · dashed grey = planned
 
-## Quick start · 快速开始
+## Quick start
 
-**环境**：Python 3.10，CARLA 0.9.16（服务器 + Python 客户端），NVIDIA 显卡显存 8 GB 以上。
+**Requirements**: Python 3.10; CARLA 0.9.16 (server and Python client) and an NVIDIA GPU with 8 GB or more for the CARLA examples.
 
 ```powershell
 git clone https://github.com/chasen2041maker/highway-sim-eval.git
 cd highway-sim-eval
-python -m pip install -r requirements.txt pytest   # 依赖清单（CI 也只装这些）
-python -m pip install carla==0.9.16 matplotlib      # 接 CARLA、画图时再装
+python -m pip install -r requirements.txt pytest   # pinned dependencies (the same set CI installs)
+python -m pip install carla==0.9.16 matplotlib      # only for the CARLA examples and plots
 
-python -m pytest -q        # 单元测试，纯 Python，不需要启动 CARLA；每次 push 由 GitHub Actions 自动跑
+python -m pytest -q        # unit tests: pure Python, no CARLA needed; GitHub Actions runs them on every push
 ```
 
-**接入 CARLA**：先启动服务器，再在另一个终端运行示例。
+**Running against CARLA**: start the server, then run an example from a second terminal.
 
 ```powershell
-# 终端 1：CARLA 安装目录下
+# terminal 1: in the CARLA install folder
 .\CarlaUE4.exe -quality-level=Low -windowed -ResX=1280 -ResY=720
 
-# 终端 2：项目根目录下
+# terminal 2: in the project root
 python -m examples.a2_client_demo
 ```
 
-> 双显卡笔记本加上 `-prefernvidia`，让 CARLA 跑在独显上。同一时间只运行一个 CARLA 实例，否则后启动的会因 2000 端口被占用而退出。
+> On laptops with two GPUs add `-prefernvidia` so CARLA uses the discrete card. Run one CARLA instance at a time; a second one exits because port 2000 is taken.
 
-## Usage · 使用示例
+## Usage
 
 ```python
 import carla
 from sim.carla_client import CarlaSim
 from sim.transforms import carla_to_ours
 
-with CarlaSim(dt_s=0.05) as sim:            # 同步模式，每帧 0.05 s
-    ego = sim.spawn_ego()                    # 生成自车，退出时自动销毁
+with CarlaSim(dt_s=0.05) as sim:            # synchronous mode, 0.05 s per frame
+    ego = sim.spawn_ego()                    # spawns the ego car; destroyed on exit
     for _ in range(60):
         ego.apply_control(carla.VehicleControl(throttle=0.5, steer=0.1))
-        frame, sim_time_s = sim.tick()       # 帧号 + 仿真时间
+        frame, sim_time_s = sim.tick()       # frame number + simulation time
         tf = ego.get_transform()
         x, y, heading = carla_to_ours(tf.location.x, tf.location.y, tf.rotation.yaw)
 
-# 离开 with（包括中途抛出异常）：销毁生成的 actor，恢复服务器原有设置
+# leaving the with-block (even on an exception) destroys spawned actors and restores the server settings
 ```
 
-## Experiment log · 实验记录
+## Experiment log
 
-Every row below comes from a script in `examples/`; the setup column says what was run. 下面每一行都来自 `examples/` 里的脚本，“设置”一栏写明了跑的是什么。
+Every row comes from a script in `examples/`; the setup column says what was run.
 
 <details>
-<summary><b>Show all experiments · 展开全部实验（CARLA 和纯 Python）</b></summary>
+<summary><b>Show all experiments (CARLA and pure Python)</b></summary>
 
 <p align="center">
-  <img src="docs/images/bicycle_circles.png" width="46%" alt="运动学自行车模型定转角绕圈">
-  <img src="docs/images/pid_uphill.png" width="50%" alt="PID 上坡速度控制">
+  <img src="docs/images/bicycle_circles.png" width="46%" alt="Kinematic bicycle model driving circles at a fixed steering angle">
+  <img src="docs/images/pid_uphill.png" width="50%" alt="PID speed control on a slope">
 </p>
 
-<p align="center"><sub>两张图由 <code>python -m scripts.readme_figures</code> 生成，数据来自项目自身的模型与控制器。</sub></p>
+<p align="center">Both figures are generated by <code>python -m scripts.readme_figures</code> from the project's own model and controller.</p>
 
-| 实验 | 设置 | 结果 |
+| Experiment | Setup | Result |
 | --- | --- | --- |
-| 自行车模型绕圈 | 10 m/s，前轮转角 0.1 / 0.2 rad | 直径 55.81 / 27.63 m，与 2L / tan δ 一致；车速加倍时直径不变、一圈用时减半 |
-| PID 上坡 | 目标 10 m/s，坡道 −0.5 m/s² | 只有 P 稳定在 9.00 m/s（稳态误差 1 m/s）；PI 收敛到 10.00 m/s，最高 10.89 m/s |
-| PID 接入 CARLA（防积分饱和） | Model 3，平路，目标 8 m/s，kp 1.0，油门上限 1，8 s | ki 0.2、无防饱和：最高 9.46 m/s，8 s 时 8.27 m/s；加防积分饱和：最高 8.27，8 s 时 7.89；ki 调到 0.5：最高 8.11，8 s 时 7.99。维持 8 m/s 的稳态油门约 0.39 |
-| Pure Pursuit 接入 CARLA（沿真实车道） | Town10HD 出生点 0；用地图路点每 0.5 m 取 80 m 车道中心线（路口取第一条分支，为左转）；目标 6 m/s，12 s；Ld = 2 / 5 / 10 m | 离车道中心线最大 0.27 / 0.32 / 0.82 m。Ld 10 更早开始转向（1 s 时前轮 8.1° vs Ld 2 的 6.4°）、转得更缓（最大 11.0° vs 12.8°）、更晚回正，出弯切弯 0.82 m，约 5 s 后回到线上；6 m/s 下 Ld 2 未见摆动。由 steer 与前轮角反推 Model 3 前轮最大转角约 70°。该指标是“到最近路点的距离”，路点间隔 0.5 m 带来约 0.25 m 的分辨率误差，0.27 与 0.32 无法区分；待改为点到线段的横向误差 |
-| Pure Pursuit 前视距离 | 直道 40 m → 半径 20 m 左转 90° → 直道 40 m；起点偏离路线 3 m，10 m/s；Ld = 2 / 5 / 15 m | 直道越过路线最远 1.23 / 0.27 / 0 m，弯道最大横向误差 0.08 / 0.16 / 1.13 m：Ld 小则来回摆动，Ld 大则切弯；动画讲解见 `docs/a3_pure_pursuit_animation.html` |
-| IDM 跟车 · 前车急刹 | 两车 10 m/s、车距 25 m；前车第 5 s 起以 −5 m/s² 刹停；自车目标 15 m/s，制动上限 −8 m/s² | 只看车距：距前车 15 m 才明显制动，最大减速度 5.96 m/s²，最小车距 4.46 m；加入接近速度项后提前到 20 m，最大减速度 3.69 m/s²，最小车距 4.95 m；均未碰撞。时距改为 0.5 s：有接近速度项仍未碰撞（最小 3.50 m，最大减速度 6.69 m/s²），去掉后制动打满 8 m/s² 仍碰撞 |
-| IDM 接入 CARLA · 前车急刹（开环踏板） | 复现上一行场景：Town10HD 出生点 80（前方 178 m 直路，`examples/tool_find_straight.py` 筛选），两车 Model 3；前 1 s 两车按剧本保持 10 m/s 后 IDM 接管；前车用 `set_target_velocity` 按剧本以 −5 m/s² 刹停；IDM 加速度直接经 `to_pedals` 作为踏板量 | 未碰撞，最小车距 6.26 / 6.28 m（两次运行）。IDM 输出与手算一致（7.0 s：−0.06 m/s²；去掉接近速度项为 +1.21），但车辆没有按该加速度运动：跟车 10 m/s 时 IDM 输出约 +0.45、实际加速度 ≈ 0（维持车速所需油门）；前车刹停期间 IDM 输出 +0.24 → −0.06，制动踏板最大 0.07，松油门滑行的实际减速度却达 −2.7 m/s²。即“加速度 → 踏板”开环映射有偏差：IDM 的 0 对应油门约 0.45，油门 0 对应约 −2 m/s²；本次偏保守属偶然。单帧极值（IDM 最大减速需求）两次运行为 −0.57 / −0.10，不宜直接作指标 |
-| IDM 接入 CARLA · 前车急刹（下层速度闭环） | 同上一行场景；IDM 加速度先积分成参考车速（`shadow += a·dt`），再由 PID（kp 1.0，ki 0.5，u_max 1.0）跟踪参考车速并输出踏板；`CLOSED_LOOP` 开关可切回开环 | 未碰撞，最小车距 4.91 m，IDM 最大减速需求 −3.65 m/s²，与纯模型（4.95 m、−3.69）基本一致；前车刹停期间实际减速度 −0.37 → −3.32 跟随 IDM 输出（−1.04 → −3.63），约滞后 0.5 s；跟车 10 m/s 时 PID 的积分项自行找到约 0.43 的稳态油门，制动踏板最大 0.40（开环时 0.07）。低速（< 3 m/s）接近停车时油门 1.0 与制动 0.40 交替、出现顿挫（车速 0.42 ↔ 1.72），实际减速度单帧极值 −4.62 m/s² 来自这段顿挫而非紧急制动段（−3.32）；待加停车保持逻辑 |
-| 三样合起来 · 弯道跟车（纯模型预演） | 直道 40 m → 半径 20 m 左转 90° → 直道，路点间隔 0.5 m；两车 10 m/s、车距 25 m，前车第 3 s 进弯时以 −5 m/s² 刹停在弯内；自车 IDM（目标 15 m/s）+ Pure Pursuit（Ld 5 m）+ 自行车模型；对比“IDM 加速度直接执行”与“参考车速 + PID（ki 0.5，加速度上限 3 m/s²）”；横向误差用点到折线距离（`evaluation/metrics.py`）；`examples/a8_model_drive.py` | 直接执行：最小车距 4.96 m，最大减速度 3.28 m/s²。PID kp 1.0：最小车距 4.36 m，最大减速度 4.46 m/s²——前车制动后 3.5–5 s 实际减速度每一时刻都小于 IDM 需求（4.0 s：−1.73 vs −2.98），与参考车速的差距累积，5.5 s IDM 已放松到 −2.89 时仍以 −4.42 补刹（参考车速 2.46 m/s，实际 4.83 m/s）；kp 3.0：4.97 m、3.51 m/s²，与直接执行一致。离车道中心最远 0.09–0.10 m（制动使过弯车速降低）。说明下层控制的滞后会改变闭环安全指标，只在模型里评测规划器不够。动画：`docs/a8_brake_lag.html` |
-| 停车保持（纯模型） | 同上一行弯道场景，PID kp 1.0；`ads/planning.py` 的 `StopHold`：我 < 1.0 m/s、前车 < 0.5 m/s、车距 < 8 m 时进入（踩住刹车、PID 积分清零、参考车速置 0），前车 > 1.0 m/s 或车距 > 11 m 时退出（进入 / 退出门槛不同，即迟滞）；5 个单元测试 | 不加：低速时 IDM 为把车距从约 7.6 m 收到 5 m 而再次加速，车速 0.59 → 1.69 → 0 m/s（停下后又起步 1 次），最后停在 4.36 m；加上：7.2 s 进入保持，又起步 0 次，停在 7.61 m。CARLA 中（10-17）同一现象表现为低速油门 1.0 与制动 0.4 交替，待回家验证。动画：`docs/stop_hold.html` |
-| 激光雷达去地面（假雷达，纯 Python） | `sim/fake_lidar.py`：numpy 光线求交模拟 32 线雷达（+10° ～ −30°，水平每 0.4°，量程 50 m，测距噪声 σ 2 cm），雷达离地 1.8 m，场景 5 个盒子（同车道前车 15 m、左车道车、路边停车、行人、后车）；`ads/perception.py` 的 `remove_ground` 按高度阈值去地面；`examples/a5_fake_scan.py`、`examples/a5_remove_ground.py`；3 个单元测试 | 一圈 28 800 束 → 19 897 点：地面 19 164（96.3%）、物体 733；22 根下倾激光落地成环（3.1–35.5 m，其中 17 环在 10.9 m 以内）；本车道前车 17.3 m 以外地面 0 点（遮挡：越过车顶的激光约 104 m 外才落地，超出量程）。阈值 z > −1.6 m（离地 0.20 m）：地面残留 0，物体保留 650 / 733（底部 0.2 m 被一起切掉）；阈值 −1.79 m（离地 0.01 m）：测距噪声使 1 069 个地面点漏过，物体保留 725。动画：`docs/a5_lidar_scan.html`（扫描、遮挡）、`docs/a5_lidar_mounting.html`（量产车与 Robotaxi 的雷达安装位置） |
-| 激光雷达聚类（DBSCAN，纯 Python） | 接上一行，去地面后 650 点，俯视 (x, y) 用 `ads/perception.py` 的 `cluster_points`（sklearn DBSCAN），min_samples 5；`examples/a5_cluster.py` 按真值统计每个物体被分进几簇；5 个单元测试 | eps 0.5 m：8 簇——后车被切成 2 簇（车头面与车顶之间 0.86 m 无点：第 10 根激光擦过车头上沿，10.67 m 处才落到车顶），路边停车 3 簇；eps 1.0 m：正好 5 簇，左车道远车 4 点为噪声；eps 5.0 m：4 簇——前车与路边停车（最近 3.62 m）粘成 1 簇，簇中心 (8.8, −2.9) 落在两车之间空地。eps 须大于物体内最大缝隙、小于物体间最小距离（本场景约 1.0–3.5 m）。动画：`docs/a5_dbscan.html`（核心点、扩张、噪声）、`docs/a5_roof_gap.html`（车顶缝隙成因） |
-| 激光雷达画框（轴对齐框，纯 Python） | 接上一行，eps 1.0 m 的 5 簇，`ads/perception.py` 的 `cluster_to_box` 每簇取 x、y 最小 / 最大值 → 中心 + 长宽；`examples/a5_box.py` 对照真值打印中心误差、画俯视图；2 个单元测试 | 中心误差：行人 0.02 m、路边停车 0.31 m（斜前方，可见车尾 + 侧面，L 形）、后车 1.83 m、同车道前车 2.30 m、左车道车 2.30 m。前车只被打到车尾一面（105 点，框长 0.08 m）：车顶仅低于雷达 0.3 m，落到车顶需下倾 0.99°–1.35°，而相邻激光间隔 1.29°（−0.32° 越过车顶、−1.61° 打在车尾 1.44 m 高），车顶 0 点；min / max 框中心落在车尾，偏向雷达半个车长（4.6 / 2 = 2.3 m）。到车尾的纵向距离（12.70 m）仍准确，偏的是中心。动画：`docs/a5_cluster_box.html`（一簇点 → 框）、`docs/a5_box_offset.html`（侧视车顶缝、俯视 I 形 / L 形） |
-| 激光雷达检测评测（纯 Python） | 接上一行的 5 个框；`evaluation/metrics.py` 的 `detection_metrics`：框中心与真值中心两两算距离，每次取全场最近的一对、超过门槛即停、一对一（贪心配对，框没有置信度）；`examples/a5_eval.py` 按 nuScenes 的四档中心距离门槛 0.5 / 1 / 2 / 4 m 计算；7 个单元测试 | 门槛 0.5 / 1 m：配上 2 对（行人、路边停车），召回率 = 精确率 = 0.40，平均中心误差 0.17 m；2 m：加上后车，0.60 / 0.60、0.72 m；4 m：5 对全部配上，1.00 / 1.00、1.35 m。前车与左车道车只被打到车尾（中心偏 2.30 m），2 m 门槛下同一个框同时计一次漏检和一次误报。门槛决定“偏多远仍算检测到”，单一门槛不能同时反映找没找到和准不准，所以按多档平均。动画：`docs/a5_match.html`（配对规则、门槛）、`docs/a5_rear_face.html`（前车只剩车尾，与 eps 无关） |
-| 坡道上去地面（RANSAC，纯 Python） | `sim/fake_lidar.py` 设 `ground_slope = 0.04`（上坡 4%：路面 z = −1.8 + 0.04·x）；`examples/a5_slope.py` 对比按高度一刀切（`remove_ground`，z > −1.6）与 RANSAC 拟合地面平面（每次随机抽 3 点定平面，数离平面 < 0.15 m 的内点，抽 50 次取内点最多者；离平面 > 0.2 m 才算障碍物） | 一刀切：路面在前方 5 m（0.20 / 0.04）处高过门槛，19 314 个路面点中 3 371 个被当成障碍物，DBSCAN 24 簇，2 m 门槛召回 0.20、精确 0.04（平地 0.60 / 0.60），相当于前方 5 m 一堵“墙”（幽灵刹车）。RANSAC：最优平面 z = −1.78 + 0.041·x（19 350 内点；含车顶点的候选仅 924，三点相距过近的候选 11 808），路面残留 0，5 簇，召回 / 精确 0.60 / 0.60。对比：所有点做最小二乘偏 3 cm、物体点少保留 22 个（本帧路面占 96%；非地面点多时会被拽偏）。动画：`docs/a5_slope_ground.html`（3D 分步 + 侧视 RANSAC 慢放） |
-| 坐标转换（CARLA 实车） | Model 3，油门 0.5，steer 0.1，3 s | CARLA：y 24.49 → 26.49，yaw 0.98° → 19.77°；转换后：y −24.49 → −26.49，航向 −0.017 → −0.345 rad，与手算一致 |
-| 同步模式可复现性 | 同一脚本重复运行；`CarlaSim` 重构前后 | 位置、航向、车速逐位相同 |
-| 车型差异 | 同一控制输入，Model 3 vs CarlaCola 卡车 | 3 s 末车速 5.95 vs 1.44 m/s；每行驶 1 m 航向变化均约 0.04 rad，转弯半径与车速无关 |
-| 异步 vs 同步 | 服务器空转 | 异步：现实 1 s 推进约 238 帧；同步：不调用 `tick()` 帧号不变 |
+| Bicycle model circles | 10 m/s, front-wheel angle 0.1 / 0.2 rad | Diameter 55.81 / 27.63 m, matching 2L / tan δ; doubling the speed keeps the diameter and halves the lap time |
+| PID on a slope | Target 10 m/s, slope −0.5 m/s² | P only settles at 9.00 m/s (1 m/s steady-state error); PI converges to 10.00 m/s, peak 10.89 m/s |
+| PID in CARLA (anti-windup) | Model 3, flat road, target 8 m/s, kp 1.0, throttle limit 1, 8 s | ki 0.2 without anti-windup: peak 9.46 m/s, 8.27 m/s at 8 s; with anti-windup: peak 8.27, 7.89 at 8 s; ki 0.5: peak 8.11, 7.99 at 8 s. Holding 8 m/s takes about 0.39 throttle |
+| Pure Pursuit in CARLA (real lane) | Town10HD spawn 0; 80 m of lane centre line from map waypoints every 0.5 m (first branch at the junction, a left turn); target 6 m/s, 12 s; Ld = 2 / 5 / 10 m | Max distance from the centre line 0.27 / 0.32 / 0.82 m. Ld 10 starts turning earlier (front wheel 8.1° at 1 s vs 6.4° for Ld 2), turns more gently (max 11.0° vs 12.8°) and straightens later, cutting the corner by 0.82 m and returning to the line after about 5 s; no weaving with Ld 2 at 6 m/s. Steer vs wheel angle implies a Model 3 maximum wheel angle of about 70°. This metric was "distance to the nearest waypoint", which carries about 0.25 m of resolution error at 0.5 m spacing, so 0.27 and 0.32 can't be told apart; to be rerun with point-to-segment error |
+| Pure Pursuit look-ahead | 40 m straight → 90° left turn of radius 20 m → 40 m straight; start 3 m off the path, 10 m/s; Ld = 2 / 5 / 15 m | Furthest overshoot on the straight 1.23 / 0.27 / 0 m, max lateral error in the bend 0.08 / 0.16 / 1.13 m: short look-ahead weaves, long look-ahead cuts corners. Explainer: `docs/a3_pure_pursuit_animation.html` |
+| IDM car following, lead car brakes hard | Both cars 10 m/s, gap 25 m; lead brakes at −5 m/s² from 5 s to a stop; ego target 15 m/s, braking limit −8 m/s² | Gap term only: brakes noticeably only at 15 m, max deceleration 5.96 m/s², minimum gap 4.46 m; with the closing-speed term braking starts at 20 m, max 3.69 m/s², minimum gap 4.95 m; no collision in either. With a 0.5 s time headway: still no collision with the closing-speed term (minimum 3.50 m, max 6.69 m/s²); without it the car collides even at full 8 m/s² braking |
+| IDM in CARLA, hard braking (open-loop pedals) | Same scenario: Town10HD spawn 80 (178 m of straight road, found with `examples/tool_find_straight.py`), two Model 3s; both scripted at 10 m/s for 1 s, then IDM takes over; the lead brakes at −5 m/s² via `set_target_velocity`; IDM acceleration goes straight to the pedals through `to_pedals` | No collision, minimum gap 6.26 / 6.28 m (two runs). IDM output matches hand calculation (7.0 s: −0.06 m/s²; +1.21 without the closing-speed term), but the car did not follow it: following at 10 m/s IDM asks for about +0.45 while actual acceleration ≈ 0 (the throttle needed to hold speed); while the lead stops IDM goes +0.24 → −0.06, brake pedal max 0.07, yet coasting off the throttle gives −2.7 m/s². The open-loop map from acceleration to pedals is biased: IDM's 0 is about 0.45 throttle, and 0 throttle is about −2 m/s². Being conservative here was luck. The single-frame extreme (IDM's peak braking demand) was −0.57 / −0.10 across two runs, so it is not a usable metric |
+| IDM in CARLA, hard braking (inner speed loop) | Same scenario; IDM acceleration is integrated into a reference speed (`shadow += a·dt`) and a PID (kp 1.0, ki 0.5, u_max 1.0) tracks it and outputs the pedals; `CLOSED_LOOP` switches back to open loop | No collision, minimum gap 4.91 m, IDM peak braking demand −3.65 m/s², in line with the pure model (4.95 m, −3.69). While the lead stops, actual deceleration −0.37 → −3.32 follows IDM (−1.04 → −3.63) about 0.5 s late; following at 10 m/s the PID integral finds about 0.43 throttle on its own; brake pedal max 0.40 (0.07 open loop). Below 3 m/s near the stop, throttle 1.0 and brake 0.40 alternate and the car jerks (speed 0.42 ↔ 1.72); the single-frame extreme of −4.62 m/s² comes from this jerk, not the emergency braking (−3.32). Needs stop-and-hold logic |
+| All three together: car following in a bend (pure model) | 40 m straight → 90° left turn of radius 20 m → straight, waypoints every 0.5 m; both cars 10 m/s, gap 25 m, the lead brakes at −5 m/s² to a stop inside the bend at 3 s; ego IDM (target 15 m/s) + Pure Pursuit (Ld 5 m) + bicycle model; compares executing IDM's acceleration directly with reference speed + PID (ki 0.5, acceleration limit 3 m/s²); lateral error as point-to-polyline distance (`evaluation/metrics.py`); `examples/a8_model_drive.py` | Direct: minimum gap 4.96 m, max deceleration 3.28 m/s². PID kp 1.0: minimum gap 4.36 m, max deceleration 4.46 m/s². From 3.5 to 5 s after the lead brakes, actual deceleration is below IDM's demand at every moment (4.0 s: −1.73 vs −2.98); the gap to the reference speed builds up, so at 5.5 s, with IDM already easing to −2.89, the car still brakes at −4.42 to catch up (reference 2.46 m/s, actual 4.83 m/s). kp 3.0: 4.97 m, 3.51 m/s², same as direct. Max distance from the lane centre 0.09–0.10 m (braking slows the car in the bend). Lag in the low-level controller changes closed-loop safety metrics, so evaluating a planner only in the model isn't enough. Explainer: `docs/a8_brake_lag.html` |
+| Stop-and-hold (pure model) | Same bend scenario, PID kp 1.0; `StopHold` in `ads/planning.py`: enters when ego < 1.0 m/s, lead < 0.5 m/s and gap < 8 m (holds the brake, resets the PID integral, sets the reference speed to 0); exits when the lead > 1.0 m/s or gap > 11 m (different enter and exit thresholds, i.e. hysteresis); 5 unit tests | Without it, at low speed IDM accelerates again to close the gap from about 7.6 m to 5 m: speed 0.59 → 1.69 → 0 m/s (stops and starts once more), ending at 4.36 m. With it: hold at 7.2 s, no restart, stops at 7.61 m. The same effect showed in CARLA as throttle 1.0 alternating with brake 0.4 at low speed; to be verified in CARLA. Explainer: `docs/stop_hold.html` |
+| LiDAR ground removal (simulated LiDAR, pure Python) | `sim/fake_lidar.py`: numpy ray casting of a 32-beam LiDAR (+10° to −30°, 0.4° horizontal, 50 m range, 2 cm range noise σ), mounted 1.8 m above the ground; scene of 5 boxes (lead car 15 m ahead, a car in the left lane, a parked car, a pedestrian, a car behind); `remove_ground` in `ads/perception.py` cuts at a height threshold; `examples/a5_fake_scan.py`, `examples/a5_remove_ground.py`; 3 unit tests | One sweep, 28,800 rays → 19,897 points: ground 19,164 (96.3%), objects 733; the 22 downward beams land as rings (3.1–35.5 m, 17 of them within 10.9 m); no ground points in my lane beyond 17.3 m (occlusion: beams that clear the lead car's roof land about 104 m out, beyond range). Threshold z > −1.6 m (0.20 m above ground): 0 ground points left, 650 / 733 object points kept (the bottom 0.2 m goes too); −1.79 m (0.01 m above ground): range noise lets 1,069 ground points through, 725 object points kept. Explainers: `docs/a5_lidar_scan.html` (sweep, occlusion), `docs/a5_lidar_mounting.html` (where production cars and robotaxis mount LiDARs) |
+| LiDAR clustering (DBSCAN, pure Python) | The 650 points left after ground removal, clustered top-down on (x, y) with `cluster_points` in `ads/perception.py` (sklearn DBSCAN), min_samples 5; `examples/a5_cluster.py` counts clusters per object against ground truth; 5 unit tests | eps 0.5 m: 8 clusters. The car behind splits in two (0.86 m without points between the hood face and the roof: the 10th beam grazes the top of the hood and lands on the roof only at 10.67 m), and the parked car splits in three. eps 1.0 m: exactly 5 clusters, the 4 points on the far left-lane car are noise. eps 5.0 m: 4 clusters, the lead car and the parked car (3.62 m apart) merge, with the cluster centre (8.8, −2.9) on empty road between them. eps must be larger than the largest gap inside an object and smaller than the smallest gap between objects (about 1.0–3.5 m here). Explainers: `docs/a5_dbscan.html` (core points, expansion, noise), `docs/a5_roof_gap.html` (where the roof gap comes from) |
+| LiDAR boxes (axis-aligned, pure Python) | The 5 clusters at eps 1.0 m; `cluster_to_box` in `ads/perception.py` takes the min / max of x and y per cluster → centre + size; `examples/a5_box.py` prints centre error against ground truth and plots a top view; 2 unit tests | Centre error: pedestrian 0.02 m, parked car 0.31 m (seen at an angle, rear + side visible, an L shape), car behind 1.83 m, lead car 2.30 m, left-lane car 2.30 m. The lead car is hit only on its rear face (105 points, box 0.08 m long): its roof is only 0.3 m below the LiDAR, so a beam would need to point 0.99°–1.35° down to land on it, while neighbouring beams are 1.29° apart (−0.32° clears the roof, −1.61° hits the rear at 1.44 m); 0 points on the roof. The min/max box centre sits on the rear face, half a car length (4.6 / 2 = 2.3 m) closer to the LiDAR. The distance to the rear (12.70 m) is still correct; only the centre is off. Explainers: `docs/a5_cluster_box.html` (points → box), `docs/a5_box_offset.html` (side view of the roof gap, I and L shapes from above) |
+| LiDAR detection evaluation (pure Python) | The 5 boxes above; `detection_metrics` in `evaluation/metrics.py`: distances between every box centre and every true centre, repeatedly take the closest pair, stop once it exceeds the gate, one-to-one (greedy matching; the boxes have no confidence score); `examples/a5_eval.py` evaluates at the nuScenes centre-distance gates 0.5 / 1 / 2 / 4 m; 7 unit tests | Gates 0.5 / 1 m: 2 matches (pedestrian, parked car), recall = precision = 0.40, mean centre error 0.17 m; 2 m: plus the car behind, 0.60 / 0.60, 0.72 m; 4 m: all 5 matched, 1.00 / 1.00, 1.35 m. The lead and left-lane cars are seen only from behind (centre 2.30 m off), so at the 2 m gate one box counts as both a miss and a false alarm. The gate decides how far off still counts as found; a single gate can't measure both "found it" and "found it accurately", hence averaging over several gates. Explainers: `docs/a5_match.html` (matching rule, gates), `docs/a5_rear_face.html` (only the rear face, unrelated to eps) |
+| Ground removal on a slope (RANSAC, pure Python) | `ground_slope = 0.04` in `sim/fake_lidar.py` (4% upgrade: road z = −1.8 + 0.04·x); `examples/a5_slope.py` compares the fixed height cut (`remove_ground`, z > −1.6) with a RANSAC ground plane (3 random points per plane, count inliers within 0.15 m, keep the best of 50 draws; points more than 0.2 m above the plane are obstacles) | Height cut: the road rises above the threshold 5 m ahead (0.20 / 0.04), 3,371 of 19,314 road points become obstacles, 24 DBSCAN clusters, recall 0.20 and precision 0.04 at the 2 m gate (0.60 / 0.60 on flat ground), a "wall" 5 m ahead that would trigger phantom braking. RANSAC: best plane z = −1.78 + 0.041·x (19,350 inliers; a candidate through a roof point got 924, one from three points too close together 11,808), 0 road points left, 5 clusters, recall / precision 0.60 / 0.60. Least squares over all points is off by 3 cm and keeps 22 fewer object points (96% of this frame is road; it gets dragged off when there are more non-ground points). Explainer: `docs/a5_slope_ground.html` (3D steps + side-view RANSAC slow motion) |
+| Speed from LiDAR distances (pure Python) | I follow at 20 m/s, the lead car does 18 m/s, starting 20 m ahead; distance measured each frame at 10 Hz with 0.2 m noise σ, 5 s; `diff_speed` in `ads/tracking.py` takes the difference of neighbouring frames ÷ 0.1 s; `examples/a6_diff_speed.py`; 2 unit tests | True closing speed −2.00 m/s. Differenced speed averages −1.99 but ranges from −7.50 to +3.55 (error σ 2.13, max 5.55 m/s): dividing by 0.1 s multiplies the range noise by 10, and one bad frame pushes its two neighbouring speeds in opposite directions |
+| Coordinate transform (CARLA) | Model 3, throttle 0.5, steer 0.1, 3 s | CARLA: y 24.49 → 26.49, yaw 0.98° → 19.77°; after conversion: y −24.49 → −26.49, heading −0.017 → −0.345 rad, matching hand calculation |
+| Synchronous-mode reproducibility | The same script run repeatedly; before and after refactoring `CarlaSim` | Position, heading and speed identical to the last digit |
+| Vehicle differences | Same control input, Model 3 vs CarlaCola truck | Speed at 3 s 5.95 vs 1.44 m/s; heading change per metre travelled about 0.04 rad for both, so the turning radius doesn't depend on speed |
+| Asynchronous vs synchronous | Server idling | Asynchronous: about 238 frames per real second; synchronous: the frame number doesn't move until `tick()` is called |
 
-<sub>CARLA 实验环境：CARLA 0.9.16，Town10HD_Opt，Windows，RTX 4080 Laptop。</sub>
+CARLA setup: CARLA 0.9.16, Town10HD_Opt, Windows, RTX 4080 Laptop.
 
 </details>
 
-## Coordinates and units · 坐标与单位约定
+## Coordinates and units
 
-项目内部统一使用车辆右手系（ISO 8855 / ROS REP 103），与 CARLA 交互时在 `sim/transforms.py` 一处转换。
+Everything inside the project uses a right-handed vehicle frame (ISO 8855 / ROS REP 103). The conversion to and from CARLA happens in one place, `sim/transforms.py`.
 
-| | 本项目 | CARLA（Unreal Engine 4） |
+| | This project | CARLA (Unreal Engine 4) |
 | --- | --- | --- |
-| x | 向前 | 向前 |
-| y | **向左** | **向右** |
-| z | 向上 | 向上 |
-| 航向角 | 弧度，左转为正 | 度，右转为正 |
-| 转换 | — | x 不变；y 取反；航向取反并换算单位 |
+| x | forward | forward |
+| y | **left** | **right** |
+| z | up | up |
+| Heading | radians, left turn positive | degrees, right turn positive |
+| Conversion | — | x unchanged; y negated; heading negated and converted |
 
-时间统一用仿真时间（秒）和帧号；每个模块在文档字符串里写明输入、输出、单位和坐标系。
+Time is simulation time in seconds plus the frame number. Every function's docstring states its inputs, outputs, units and coordinate frame.
 
-## Layout · 目录结构
+## Layout
 
 ```text
 highway-sim-eval/
-├─ ads/              驾驶栈：车辆模型、控制、IDM 跟车、激光雷达感知、跟踪（进行中；变道规划待加入）
-├─ sim/              CARLA 连接与同步主循环、坐标转换、假激光雷达（传感器录制待加入）
-├─ evaluation/       指标：横向误差、检测评测（召回率 / 精确率 / 中心误差）
-├─ examples/         可直接运行的实验脚本
-├─ scripts/          工具脚本（README 配图等）
-├─ tests/            单元测试（GitHub Actions 每次 push 自动跑）
-└─ docs/            动画讲解（浏览器打开）；images/ 为 README 配图
+├─ ads/              driving stack: vehicle model, control, IDM car following, LiDAR perception, tracking (in progress)
+├─ sim/              CARLA connection and synchronous loop, coordinate transforms, simulated LiDAR
+├─ evaluation/       metrics: lateral error, detection evaluation (recall / precision / centre error)
+├─ examples/         runnable experiment scripts
+├─ scripts/          tooling (README figures, etc.)
+├─ tests/            unit tests (GitHub Actions runs them on every push)
+└─ docs/             interactive explainers (open in a browser); images/ holds README figures
 ```
 
-后续按功能逐步加入：`scenarios/` 参数化场景库 · `evaluation/` 批量调度与指标 · `dashboard/` 网页看板 · `mining/` 数据挖掘 · `learning/` 闭环训练 · `cpp/` C++ 跟踪器 · `ros2/` ROS 2 发布与录包。
+Planned additions: `scenarios/` parametric scenario library · `evaluation/` batch runner and metrics · `dashboard/` web dashboard · `mining/` data mining · `learning/` closed-loop training · `cpp/` C++ tracker · `ros2/` ROS 2 publishing and bags.
 
-## Roadmap · 路线图
+## Roadmap
 
-| 阶段 | 目标 | 可展示的成果 | 状态 |
+| Stage | Goal | What I'll be able to show | Status |
 | --- | --- | --- | --- |
-| **A** 驾驶栈打通 | 在 CARLA 城市道路里自己开起来 | 激光雷达检测 + 多目标跟踪 + 变道超车演示视频 | 🚧 进行中 |
-| **B** 评测与数据闭环 | 批量场景闭环评测 | 几十种场景自动打分、失败回放、版本对比看板 | 📋 |
-| **C** 多模态数据挖掘 | 用视觉语言模型理解场景 | 自动打标、一句话检索场景、失败归因，并给出准确率 | 📋 |
-| **D** 闭环学习 | 采数据 → 训练 → 评测 → 补数据 | 小型端到端模型的迭代前后指标对比 | 📋 |
-| **E** 工程化 | 性能与部署 | C++ 跟踪器、ROS 2 录包、Docker 评测客户端 | 📋 |
+| **A** Driving stack | Drive on its own through CARLA city streets | LiDAR detection + multi-object tracking + lane-change overtaking, on video | In progress |
+| **B** Evaluation and data loop | Batch closed-loop evaluation over scenarios | Dozens of scenarios scored automatically, failure replay, version comparison dashboard | Planned |
+| **C** Multimodal data mining | Use vision-language models to understand scenes | Auto-labelling, scenario search in plain language, failure attribution, each with measured accuracy | Planned |
+| **D** Closed-loop learning | Collect → train → evaluate → collect more | Before/after metrics for a small end-to-end model | Planned |
+| **E** Engineering | Performance and deployment | C++ tracker, ROS 2 bags, Dockerised evaluation client | Planned |
 
 <details>
-<summary><b>详细清单</b></summary>
+<summary><b>Full checklist</b></summary>
 
-**A. 模块化驾驶系统**
+**A. Modular driving stack**
 
-- [x] 车辆运动学模型（自行车模型）
-- [x] 坐标系转换（CARLA ↔ 车辆右手系），CARLA 实车验证
-- [x] CARLA 同步模式主循环（`CarlaSim`）
-- [ ] 传感器录制：相机、激光雷达、GNSS、IMU，带帧号与时间戳
-- [x] Pure Pursuit 横向控制（模型上验证，前视距离对比实验）
-- [x] PID 速度控制接入 CARLA（防积分饱和）
-- [x] Pure Pursuit 接入 CARLA（沿地图车道中心线，前视距离对比）
-- [ ] 交通流与跟车（IDM 已接入 CARLA 跟剧本前车，下层速度闭环完成；停车保持纯模型完成、接入 CARLA 待做；交通流待做）
-- [x] 激光雷达感知（假雷达）：去地面（高度阈值；坡道用 RANSAC 拟合地面）+ 聚类（DBSCAN）+ 框 + 检测评测；换 CARLA 雷达待做
-- [ ] 多目标跟踪：卡尔曼滤波 + 匈牙利匹配 + 航迹管理（进行中：差分测速已做，卡尔曼在写）
-- [ ] Frenet 坐标 + 多项式轨迹：变道与超车
-- [ ] 全链打通：感知结果替换真值，俯视图回放
+- [x] Kinematic vehicle model (bicycle model)
+- [x] Coordinate transforms (CARLA ↔ right-handed vehicle frame), verified in CARLA
+- [x] CARLA synchronous main loop (`CarlaSim`)
+- [ ] Sensor recording: camera, LiDAR, GNSS, IMU, with frame numbers and timestamps
+- [x] Pure Pursuit lateral control (verified on the model, look-ahead comparison)
+- [x] PID speed control in CARLA (anti-windup)
+- [x] Pure Pursuit in CARLA (along map lane centre lines, look-ahead comparison)
+- [ ] Traffic and car following (IDM in CARLA behind a scripted lead car with an inner speed loop; stop-and-hold done in the model, CARLA next; traffic to do)
+- [x] LiDAR perception on the simulated LiDAR: ground removal (height cut; RANSAC ground plane on slopes) + DBSCAN + boxes + detection evaluation; switching to the CARLA LiDAR next
+- [ ] Multi-object tracking: Kalman filter + Hungarian matching + track management (in progress: speed by differencing done, Kalman filter being written)
+- [ ] Frenet frame + polynomial trajectories: lane changes and overtaking
+- [ ] Full chain: perception output replaces ground truth, top-down replay
 
-**B. 仿真评测与数据闭环**
+**B. Simulation evaluation and data loop**
 
-- [ ] 参数化场景库：邻车加塞、前车急刹、慢车挡路、行人横穿
-- [ ] 批量调度：任务队列、超时、失败重试、结果入库
-- [ ] 录制与回灌：回放记录数据，对感知和规划做回归
-- [ ] 指标：碰撞、TTC、舒适度、路线完成度、驾驶分；置信区间；调参与测试场景分开
-- [ ] 回归报告与看板：版本对比
+- [ ] Parametric scenarios: cut-ins, hard braking ahead, slow car blocking the lane, pedestrian crossing
+- [ ] Batch runner: task queue, timeouts, retries, results in a database
+- [ ] Record and replay: replay logged data to regression-test perception and planning
+- [ ] Metrics: collisions, TTC, comfort, route completion, driving score; confidence intervals; tuning and test scenarios kept separate
+- [ ] Regression reports and a dashboard for version comparison
 
-**C. 多模态数据挖掘**
+**C. Multimodal data mining**
 
-- [ ] 视觉语言模型自动打标，并与仿真真值对比准确率
-- [ ] 自然语言检索场景
-- [ ] 失败归因与场景生成（指标一律由程序计算，模型只负责分类、说明和生成参数）
+- [ ] Auto-labelling with a vision-language model, accuracy checked against simulator ground truth
+- [ ] Scenario search in plain language
+- [ ] Failure attribution and scenario generation (metrics always computed by code; the model only classifies, explains and proposes parameters)
 
-**D. 闭环学习**
+**D. Closed-loop learning**
 
-- [ ] 用 A 的系统批量采集示范数据
-- [ ] 训练小模型：俯视图 / 目标列表 → 未来路径与速度
-- [ ] 闭环评测，对比开环误差与闭环表现
-- [ ] 挖出失败场景，针对性补数据再训练
+- [ ] Collect demonstrations in bulk with the stack from A
+- [ ] Train a small model: top-down view / object list → future path and speed
+- [ ] Closed-loop evaluation, comparing open-loop error with closed-loop behaviour
+- [ ] Mine failure scenarios, add targeted data and retrain
 
-**E. 工程**
+**E. Engineering**
 
-- [x] GitHub Actions：每次 push 跑全部单元测试（Python 3.10，依赖固定在 `requirements.txt`）
-- [ ] C++ 实现的卡尔曼跟踪器（带单元测试，Python 绑定）
-- [ ] ROS 2 话题发布与 bag 录制
-- [ ] Docker 化的评测客户端
+- [x] GitHub Actions: every push runs all unit tests (Python 3.10, dependencies pinned in `requirements.txt`)
+- [ ] Kalman tracker in C++ (unit tests, Python bindings)
+- [ ] ROS 2 topics and bag recording
+- [ ] Dockerised evaluation client
 
 </details>
 
-## How I work on it · 做法
+## How I work on it
 
-- **Clear interfaces.** Every function states its inputs, outputs, units, coordinate frame and timestamps. 每个函数写明输入、输出、单位、坐标系和时间。
-- **Check against ground truth.** Every module is compared with the simulator's truth and reports an error number. 每个模块都和仿真真值比，给出误差。
-- **Reproducible.** Synchronous mode, fixed time step, fixed scenarios and seeds: the same input gives the same output. 同步模式、固定步长、固定场景和随机种子，同样的输入得到同样的结果。
-- **Metrics come from logs.** Scores are computed from recorded runs, never by eye. 指标一律从运行记录里算，不靠肉眼判断。
-- **Clean up after myself.** Spawned actors and server settings are restored even when a run crashes. 仿真里生成的车和服务器设置，正常结束或中途报错都会回收、还原。
+- **Clear interfaces.** Every function states its inputs, outputs, units, coordinate frame and timestamps.
+- **Check against ground truth.** Every module is compared with the simulator's truth and reports an error number.
+- **Reproducible.** Synchronous mode, a fixed time step, fixed scenarios and seeds: the same input gives the same output.
+- **Metrics come from logs.** Scores are computed from recorded runs, never by eye.
+- **Clean up after myself.** Spawned actors and server settings are restored even when a run crashes.
 
-## References · 参考
+## References
 
-- [CARLA Simulator](https://carla.org/) · [CARLA 0.9.16 文档](https://carla.readthedocs.io/en/0.9.16/)
-- [HighwayEnv](https://github.com/Farama-Foundation/HighwayEnv)：早期原型（`sim_env.py`、`check_env.py`）所用的二维高速公路环境
+- [CARLA Simulator](https://carla.org/) · [CARLA 0.9.16 documentation](https://carla.readthedocs.io/en/0.9.16/)
+- [HighwayEnv](https://github.com/Farama-Foundation/HighwayEnv): the 2D highway environment used by the early prototype (`sim_env.py`, `check_env.py`)
