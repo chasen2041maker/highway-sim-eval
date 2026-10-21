@@ -10,10 +10,30 @@
 [![CARLA](https://img.shields.io/badge/CARLA-0.9.16-1f6feb)](https://carla.org/)
 [![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](#快速开始)
 [![Status](https://img.shields.io/badge/status-active%20development-eb6834)](#路线图)
+[![Explainers](https://img.shields.io/badge/demo-interactive%20explainers-1e66d6)](https://chasen2041maker.github.io/highway-sim-eval/)
 
 [快速开始](#快速开始) · [系统架构](#系统架构) · [实验记录](#实验记录) · [路线图](#路线图)
 
 </div>
+
+---
+
+## At a glance
+
+A modular driving stack written from scratch and run closed-loop in CARLA 0.9.16, with an evaluation layer on top. Next on the roadmap: a scenario library, a batch runner, record and replay (MCAP), and data mining.
+
+| Module | What it does | Result |
+| --- | --- | --- |
+| Longitudinal control | PID speed control with anti-windup | In CARLA at a target of 8 m/s, peak speed drops from 9.46 to 8.11 m/s |
+| Lateral control | Pure Pursuit along CARLA lane waypoints | Look-ahead 2 / 5 / 10 m: max deviation 0.27 / 0.32 / 0.82 m (short weaves, long cuts corners) |
+| Car following | IDM with a closing-speed term, executed through a reference speed and a PID loop | Lead car brakes hard: minimum gap 4.91 m in CARLA vs 4.95 m in the pure-Python model |
+| Evaluation metric | Point-to-segment lateral error | Distance to the nearest waypoint hid up to 0.25 m of error at 0.5 m waypoint spacing |
+| LiDAR perception | Ground removal, DBSCAN clustering and boxes on a simulated 32-beam scan | Lead car box center is 2.30 m short because only its rear face is visible |
+| Detection evaluation | Greedy one-to-one matching on center distance; recall, precision, mean center error | Recall 0.40 / 0.60 / 1.00 at the nuScenes gates 0.5 / 2 / 4 m |
+
+52 unit tests, with expected values computed by hand. Every experiment has a step-by-step explainer: **[interactive explainers](https://chasen2041maker.github.io/highway-sim-eval/)**.
+
+<sub>The rest of this README is in Chinese. 下面是中文说明。</sub>
 
 ---
 
@@ -35,9 +55,11 @@
 | `sim/carla_client.py` | `CarlaSim`：同步模式、固定步长、自车与前车生成、异常安全的资源回收 | ✅ 完成 |
 | `ads/control.py` | PID 纵向控制（含防积分饱和）+ Pure Pursuit 横向控制 | ✅ 均已在 CARLA 验证 |
 | `ads/planning.py` | IDM 跟车（含接近速度项） | ✅ 已接入 CARLA（剧本前车急刹）；加速度经下层速度闭环（参考车速 + PID）执行 |
-| `evaluation/metrics.py` | 横向误差：车到车道中心线（路点折线）的点到线段距离，取代“到最近路点距离”（路点间距 0.5 米时后者有约 0.25 米误差） | ✅ 完成 + 测试；待接入 CARLA |
+| `evaluation/metrics.py` | 横向误差：车到车道中心线（路点折线）的点到线段距离，取代“到最近路点距离”（路点间距 0.5 米时后者有约 0.25 米误差）；检测评测：一对一贪心配对，召回率 / 精确率 / 中心误差，nuScenes 四档门槛 | ✅ 完成 + 测试；横向误差待接入 CARLA |
+| `sim/fake_lidar.py` | numpy 光线求交的 32 线假雷达（+10° ～ −30°、水平 0.4°、量程 50 m、测距噪声 2 cm），带真值标签 | ✅ 完成（笔记本预演用；回家换 CARLA `sensor.lidar.ray_cast`） |
+| `ads/perception.py` | 激光雷达：高度阈值去地面、DBSCAN 分堆、轴对齐框 | ✅ 完成 + 测试；坡道 + RANSAC 思路、换 CARLA 雷达待做 |
 | `sim/recorder.py` | 相机 / 激光雷达 / GNSS / IMU 录制，带帧号与仿真时间戳 | 📋 计划中 |
-| 感知 · 跟踪 · 规划 | RANSAC + DBSCAN、卡尔曼 + 匈牙利、Frenet 轨迹 | 📋 计划中 |
+| 跟踪 · 规划 | 卡尔曼 + 匈牙利多目标跟踪、Frenet 变道轨迹 | 📋 计划中 |
 | 评测平台 · 数据挖掘 · 闭环学习 | 见[路线图](#路线图) | 📋 计划中 |
 
 ## 系统架构

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>highway-sim-eval · Interactive explainers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --accent: #1e66d6; --chip: #f5f7f9;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --accent: #62a6ff; --chip: #1f2832; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6; padding: 32px max(16px, env(safe-area-inset-left, 0px)) 56px; }
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 22px; }
+h1 { font-size: 28px; margin: 0; letter-spacing: -0.3px; }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 72ch; }
+.lede a { color: var(--accent); }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+a.card { display: grid; gap: 4px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; }
+a.card:hover, a.card:focus-visible { border-color: var(--accent); outline: none; }
+.t { font-weight: 600; }
+.zh { color: var(--muted); font-size: 13.5px; }
+.d { font-size: 14px; }
+.n { font-family: var(--font-num); font-size: 12px; color: var(--accent); }
+footer { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>highway-sim-eval · Interactive explainers</h1>
+    <p class="lede">Step-by-step animations behind the experiments in <a href="https://github.com/chasen2041maker/highway-sim-eval">highway-sim-eval</a>. Every number on these pages comes from a real run in the repository. Pages are in Chinese; each card has an English summary.</p>
+  </header>
+
+  <section>
+    <h2>Control and planning</h2>
+    <div class="grid">
+      <a class="card" href="a3_pure_pursuit_animation.html"><span class="n">A3</span><span class="t">Pure Pursuit look-ahead</span><span class="zh">前视距离试驾场</span><span class="d">Short look-ahead weaves, long look-ahead cuts corners: 1.23 / 0.27 / 0 m overshoot at 2 / 5 / 15 m.</span></a>
+      <a class="card" href="lateral_error_animation.html"><span class="n">A3 · metric</span><span class="t">Lateral error, done right</span><span class="zh">离中心线多远</span><span class="d">Distance to the nearest waypoint hides up to 0.25 m of error; point-to-segment distance fixes it.</span></a>
+      <a class="card" href="a8_brake_lag.html"><span class="n">A8</span><span class="t">Controller lag changes safety metrics</span><span class="zh">刹车慢半拍</span><span class="d">Same planner, lagging PID: minimum gap drops from 4.96 m to 4.36 m.</span></a>
+      <a class="card" href="a8_curve_follow_scene.html"><span class="n">A8</span><span class="t">Car following in a curve</span><span class="zh">弯道跟车：两种开法</span><span class="d">IDM + Pure Pursuit + bicycle model, with the lead car braking inside the curve.</span></a>
+      <a class="card" href="stop_hold.html"><span class="n">A8</span><span class="t">Stop-and-hold with hysteresis</span><span class="zh">停车保持的门槛</span><span class="d">Different enter and exit thresholds stop the creep-stop-creep cycle at low speed.</span></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>LiDAR perception</h2>
+    <div class="grid">
+      <a class="card" href="a5_lidar_scan.html"><span class="n">A5</span><span class="t">One sweep of a 32-beam LiDAR</span><span class="zh">激光雷达扫一圈</span><span class="d">Rings on the ground, occlusion behind the lead car, the blind circle around the ego car.</span></a>
+      <a class="card" href="a5_lidar_mounting.html"><span class="n">A5</span><span class="t">Where LiDARs are mounted</span><span class="zh">激光雷达装在哪</span><span class="d">Roof, roof-front tower, bumper, headlights, full surround: a draggable 3D comparison.</span></a>
+      <a class="card" href="a5_dbscan.html"><span class="n">A5</span><span class="t">DBSCAN step by step</span><span class="zh">DBSCAN 怎么分堆</span><span class="d">Core points, expansion and noise; why eps must sit between the largest gap and the nearest neighbour.</span></a>
+      <a class="card" href="a5_roof_gap.html"><span class="n">A5</span><span class="t">Why one car became two clusters</span><span class="zh">车顶上的缝</span><span class="d">A 0.86 m unscanned gap between the hood face and the roof splits the car at eps 0.5.</span></a>
+      <a class="card" href="a5_cluster_box.html"><span class="n">A5</span><span class="t">From points to a box</span><span class="zh">一堆点怎么画框</span><span class="d">Axis-aligned min / max boxes, scanned one axis at a time.</span></a>
+      <a class="card" href="a5_box_offset.html"><span class="n">A5</span><span class="t">Why the box center is biased</span><span class="zh">前车框为什么偏</span><span class="d">I-shape vs L-shape visibility: the center always shifts toward the sensor.</span></a>
+      <a class="card" href="a5_rear_face.html"><span class="n">A5</span><span class="t">Only the rear face is visible</span><span class="zh">前车只剩车尾</span><span class="d">The lead car box is 2.30 m short, and no eps setting changes that.</span></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Evaluation</h2>
+    <div class="grid">
+      <a class="card" href="a5_match.html"><span class="n">A5</span><span class="t">Matching detections to ground truth</span><span class="zh">框认领真东西</span><span class="d">Greedy one-to-one matching on center distance; recall 0.40 / 0.60 / 1.00 at nuScenes gates 0.5 / 2 / 4 m.</span></a>
+    </div>
+  </section>
+
+  <footer>Source: <a href="https://github.com/chasen2041maker/highway-sim-eval/tree/main/docs" style="color: var(--accent)">docs/</a> · open any file offline by double-clicking it.</footer>
+</div>
+</body>
+</html>
