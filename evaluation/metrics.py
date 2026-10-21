@@ -1,6 +1,7 @@
 """评测指标：先从“离车道中心多远”开始（B4 会用到）；A5 加了检测评测（召回率、精确率、位置误差）。"""
 
 import math
+import numpy as np
 
 def point_to_segment_m(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
     """车 P 到线段 AB 的最短距离（米）：垂足在线段上就垂直量，落在外面就量到近的那颗钉子。"""
@@ -33,5 +34,31 @@ def detection_metrics(pred_xy, true_xy, max_dist_m: float) -> dict:
         "precision"：精确率 = 配上的对数 ÷ 预测个数（P 为 0 时记 0.0）；
         "mean_error_m"：位置误差 = 配上的那些对的距离的平均值（没配上的不算；一对都没有时是 float("nan")）。
     """
-    # 第 4 步：本人写（先用中文说思路），直到 python -m pytest tests/test_detection_metrics.py -v 全过
-    raise NotImplementedError("detection_metrics 还没写")
+    
+    P = len(pred_xy)
+    T = len(true_xy)
+    dist = np.zeros((P, T))
+    for i in range(P):
+        for j in range(T):
+            dx = pred_xy[i][0] - true_xy[j][0]
+            dy = pred_xy[i][1] - true_xy[j][1]
+            dist[i, j] = math.hypot(dx, dy)
+
+    matches = []
+    for _ in range(min(P, T)):
+        i, j = np.unravel_index(np.argmin(dist), dist.shape)
+        d = dist[i, j]
+        if d > max_dist_m:
+            break
+        matches.append((int(i), int(j), float(d)))
+        dist[i, :] = np.inf
+        dist[:, j] = np.inf
+
+    n = len(matches)
+    recall = n / T if T > 0 else 0.0
+    precision = n / P if P > 0 else 0.0
+    if n > 0:
+        mean_error_m = sum(m[2] for m in matches) / n
+    else:
+        mean_error_m = float("nan")
+    return {"matches": matches, "recall": recall, "precision": precision, "mean_error_m": mean_error_m}

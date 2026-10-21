@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>前车只剩车尾</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one step-through top view (overview, then zoom on the lead car), then two same-scale insets (rear car, lead car) driven by one eps switch. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --accent: #1e66d6; --accent-ink: #ffffff; --axis: #b9c2cc; --car: #d7dde4; --ego: #c3ccd6;
+  --c2: #c46a00; --shadow: #f3c9c9; --warn: #d23b3b; --ray-miss: #c3cad2; --ok: #1a8a60;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --accent: #62a6ff; --accent-ink: #11161b; --axis: #3a4652; --car: #2c3742; --ego: #34404c;
+    --c2: #ffaa4d; --shadow: #4a2427; --warn: #ff6b6b; --ray-miss: #3a4550; --ok: #3fd29a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --accent: #62a6ff; --accent-ink: #11161b; --axis: #3a4652; --car: #2c3742; --ego: #34404c;
+  --c2: #ffaa4d; --shadow: #4a2427; --warn: #ff6b6b; --ray-miss: #3a4550; --ok: #3fd29a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; text-wrap: balance; }
+h3 { font-size: 14.5px; margin: 0; font-weight: 600; }
+p { margin: 0; }
+.lede { margin-top: 4px; color: var(--muted); max-width: 76ch; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+.fig { min-width: 0; }
+svg { display: block; max-width: 100%; }
+.stepcap { font-size: 15.5px; background: var(--chip); border-radius: 8px; padding: 10px 12px; min-height: 4.4em; max-width: 82ch; }
+.stepcap b, .readout b, .sum b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
+.sub { display: block; margin-top: 4px; font-size: 13.5px; color: var(--muted); }
+.stepbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.btn, .chip { font: inherit; font-size: 14px; padding: 5px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.btn { border-radius: 8px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+.chip { border-radius: 999px; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.stepno { font-family: var(--font-num); font-size: 13px; color: var(--muted); margin-left: 4px; }
+.insets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 720px) { .insets { grid-template-columns: minmax(0, 1fr); } }
+.inset { display: grid; gap: 6px; min-width: 0; }
+.readout { font-size: 14.5px; background: var(--chip); border-radius: 8px; padding: 8px 12px; }
+.sum { font-size: 15px; border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; max-width: 82ch; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.intro { max-width: 82ch; }
+.intro b { font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--muted); align-items: center; margin-top: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; display: inline-block; box-shadow: 10px 0 0 var(--c2); margin-right: 10px; }
+.lg-box { width: 14px; height: 10px; border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 25%, transparent); display: inline-block; }
+.lg-ring { width: 12px; height: 12px; border: 2.5px solid var(--ink); border-radius: 50%; display: inline-block; }
+.lg-dash { width: 18px; height: 10px; border: 1.5px dashed var(--muted); display: inline-block; }
+.lg-eps { width: 14px; height: 14px; border: 2px dashed var(--ok); border-radius: 50%; display: inline-block; }
+.tblwrap { overflow-x: auto; }
+table.sumt { border-collapse: collapse; font-size: 14px; }
+table.sumt th, table.sumt td { border: 1px solid var(--line); padding: 6px 10px; text-align: center; }
+table.sumt th { font-weight: 500; background: var(--chip); }
+table.sumt td { font-variant-numeric: tabular-nums; }
+table.sumt td:last-child { font-family: var(--font-num); font-weight: 600; }
+table.sumt td.bad { color: var(--warn); font-weight: 600; }
+table.sumt tr.on td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.epsc { fill: none; stroke-width: 2; stroke-dasharray: 6 4; }
+.epsc.ok { stroke: var(--ok); fill: var(--ok); fill-opacity: .08; }
+.epsc.no { stroke: var(--warn); fill: var(--warn); fill-opacity: .06; }
+.gap { stroke: var(--warn); stroke-width: 1.5; }
+.lab.ok { fill: var(--ok); font-weight: 600; }
+.lab.big { font-size: 14px; font-weight: 600; }
+
+.axis { stroke: var(--axis); stroke-width: 1; }
+.ego { fill: var(--ego); stroke: var(--axis); }
+.car { fill: var(--car); stroke: var(--axis); }
+.car.dash { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.lidar { fill: var(--ink); }
+.ray { stroke: var(--accent); stroke-width: 1.2; stroke-opacity: .75; }
+.ray.miss { stroke: var(--ray-miss); stroke-opacity: 1; }
+.shadow { fill: var(--shadow); fill-opacity: .75; }
+.pt { fill: var(--accent); }
+.pt.c1 { fill: var(--c2); }
+.mm { stroke: var(--c2); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.box { fill: var(--accent); fill-opacity: .25; stroke: var(--accent); stroke-width: 2; }
+.box.c1 { fill: var(--c2); stroke: var(--c2); }
+.bc { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+.bc.c1 { fill: var(--c2); }
+.tc { fill: var(--surface); stroke: var(--ink); stroke-width: 2.5; }
+.dline { stroke: var(--warn); stroke-width: 2; }
+.brk { stroke: var(--muted); stroke-width: 1.2; fill: none; }
+.halo { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.lab { font: 13px var(--font-body); fill: var(--ink); }
+.lab.muted { fill: var(--muted); }
+.lab.warn { fill: var(--warn); font-weight: 600; }
+.lab.c2 { fill: var(--c2); }
+.lab.acc { fill: var(--accent); font-weight: 600; }
+.num { font-family: var(--font-num); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>前车只剩车尾</h1>
+    <p class="lede">为什么前车的框中心比真中心近了 2.30 米？从天上往下看，一帧一帧走一遍。下面第二块再看：这件事和 eps 有没有关系。</p>
+  </header>
+
+  <section class="panel" aria-labelledby="h1x">
+    <h2 id="h1x">① 激光只碰得到车尾</h2>
+    <div class="fig"><svg id="main" role="img" aria-label="俯视：自车、雷达、前车、激光、点和框"></svg></div>
+    <p class="stepcap" id="cap" aria-live="polite"></p>
+    <div class="stepbar">
+      <button class="btn" id="prev">上一步</button>
+      <button class="btn primary" id="next">下一步</button>
+      <button class="btn" id="reset">从头</button>
+      <span class="stepno" id="stepno"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h2x">
+    <h2 id="h2x">② 2.30 米和 eps 有没有关系？</h2>
+    <p class="intro">上次两件事记成了一件：第 2 步是<b>后车</b>被切成两堆，第 3 步是<b>前车</b>的框偏 2.30 米。这里把两辆车放进同一张图，换 eps，看各自变了什么。</p>
+    <div class="fig"><svg id="eps" role="img" aria-label="俯视：自车、后车、前车的激光点，按堆上色，以及 eps 圈"></svg></div>
+    <div class="legend">
+      <span><i class="lg-dot"></i>激光点（同一种颜色 = 同一堆）</span>
+      <span><i class="lg-box"></i>算法画的框</span>
+      <span><i class="lg-ring"></i>真中心</span>
+      <span><i class="lg-dash"></i>真车（算法看不到）</span>
+      <span><i class="lg-eps"></i>eps 圈：圈里的点算邻居</span>
+    </div>
+    <p class="stepcap" id="cap2" aria-live="polite"></p>
+    <div class="stepbar">
+      <button class="btn" id="prev2">上一步</button>
+      <button class="btn primary" id="next2">下一步</button>
+      <button class="btn" id="reset2">从头</button>
+      <span class="stepno" id="stepno2"></span>
+    </div>
+    <div class="tblwrap">
+      <table class="sumt" aria-label="4 个 eps 的结果">
+        <thead><tr><th>eps</th><th>后车</th><th>前车</th><th>前车框偏差</th></tr></thead>
+        <tbody>
+          <tr data-row="0.5"><td>0.5</td><td class="bad">2 堆</td><td>1 堆</td><td>2.30 米</td></tr>
+          <tr data-row="1.0"><td>1.0</td><td>1 堆</td><td>1 堆</td><td>2.30 米</td></tr>
+          <tr data-row="2.0"><td>2.0</td><td>1 堆</td><td>1 堆</td><td>2.30 米</td></tr>
+          <tr data-row="3.0"><td>3.0</td><td>1 堆</td><td>1 堆</td><td>2.30 米</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sum">eps 只管“分成几堆”，所以它能把后车切开（第 2 步）。前车偏 2.30 米是因为“只看得到车尾”（第 3 步），最右边一列 eps 怎么换都是 <b>2.30</b>。</p>
+  </section>
+</div>
+
+<script>
+const DATA = {"lead":[[12.703,0.0],[12.697,0.089],[12.713,0.178],[12.702,0.266],[12.689,0.354],[12.707,0.444],[12.726,0.533],[12.719,0.622],[12.686,0.709],[12.675,0.797],[12.688,0.887],[12.726,-0.89],[12.685,-0.798],[12.734,-0.712],[12.694,-0.621],[12.731,-0.534],[12.691,-0.443],[12.685,-0.354],[12.705,-0.266],[12.721,-0.178],[12.703,-0.089],[12.688,0.0],[12.673,0.088],[12.672,0.177],[12.71,0.266],[12.72,0.355],[12.697,0.443],[12.679,0.531],[12.717,0.622],[12.674,0.709],[12.686,0.798],[12.712,0.889],[12.685,-0.887],[12.708,-0.8],[12.694,-0.71],[12.708,-0.622],[12.665,-0.531],[12.691,-0.443],[12.697,-0.355],[12.672,-0.265],[12.738,-0.178],[12.689,-0.089],[12.728,0.0],[12.687,0.089],[12.695,0.177],[12.724,0.267],[12.706,0.355],[12.704,0.444],[12.705,0.533],[12.673,0.62],[12.692,0.71],[12.681,0.798],[12.704,0.888],[12.723,-0.89],[12.693,-0.799],[12.719,-0.711],[12.688,-0.621],[12.684,-0.532],[12.713,-0.444],[12.688,-0.354],[12.669,-0.265],[12.698,-0.177],[12.673,-0.088],[12.7,0.0],[12.727,0.089],[12.719,0.178],[12.7,0.266],[12.697,0.355],[12.694,0.443],[12.687,0.532],[12.707,0.621],[12.697,0.71],[12.692,0.799],[12.705,0.888],[12.665,-0.886],[12.733,-0.801],[12.728,-0.712],[12.688,-0.621],[12.698,-0.532],[12.701,-0.444],[12.722,-0.355],[12.69,-0.266],[12.712,-0.178],[12.705,-0.089],[12.706,0.0],[12.721,0.089],[12.703,0.177],[12.675,0.265],[12.718,0.355],[12.69,0.443],[12.718,0.533],[12.705,0.621],[12.681,0.709],[12.705,0.799],[12.687,0.887],[12.679,-0.887],[12.72,-0.8],[12.663,-0.708],[12.721,-0.622],[12.721,-0.533],[12.659,-0.442],[12.695,-0.355],[12.706,-0.266],[12.72,-0.178],[12.689,-0.089]],"rear":[[-10.595,1.188],[-10.583,1.112],[-10.601,1.039],[-10.626,0.967],[-10.647,0.894],[-10.598,0.815],[-10.658,0.745],[-10.66,0.671],[-10.653,0.596],[-10.647,0.521],[-10.639,0.446],[-10.677,0.373],[-10.689,0.299],[-10.688,0.224],[-10.679,0.149],[-10.661,0.074],[-10.63,0.0],[-10.654,-0.074],[-10.666,-0.149],[-10.626,-0.223],[-10.658,-0.298],[-10.656,-0.372],[-10.659,-0.447],[-10.618,-0.519],[-10.624,-0.594],[-9.729,1.229],[-9.712,1.158],[-9.707,1.089],[-9.693,1.019],[-9.736,0.955],[-9.716,0.884],[-9.696,0.814],[-9.669,0.744],[-9.707,0.679],[-9.677,0.609],[-9.666,0.54],[-9.694,0.474],[-9.706,0.407],[-9.726,0.34],[-9.706,0.271],[-9.716,0.204],[-9.676,0.135],[-9.7,0.068],[-9.702,0.0],[-9.717,-0.068],[-9.702,-0.135],[-9.716,-0.204],[-9.69,-0.271],[-9.707,-0.339],[-9.708,-0.407],[-9.675,-0.473],[-9.704,-0.543],[-9.694,-0.61],[-9.706,1.226],[-9.695,1.156],[-9.673,1.085],[-9.699,1.019],[-9.732,0.954],[-9.74,0.886],[-9.689,0.814],[-9.718,0.748],[-9.703,0.678],[-9.706,0.611],[-9.725,0.544],[-9.717,0.475],[-9.703,0.407],[-9.681,0.338],[-9.678,0.27],[-9.699,0.203],[-9.706,0.136],[-9.71,0.068],[-9.716,0.0],[-9.72,-0.068],[-9.652,-0.135],[-9.718,-0.204],[-9.679,-0.27],[-9.722,-0.34],[-9.707,-0.407],[-9.713,-0.475],[-9.689,-0.542],[-9.706,-0.611],[-9.705,1.226],[-9.681,1.154],[-9.69,1.087],[-9.688,1.018],[-9.701,0.951],[-9.714,0.884],[-9.695,0.814],[-9.697,0.746],[-9.658,0.675],[-9.679,0.609],[-9.737,0.544],[-9.666,0.473],[-9.727,0.408],[-9.694,0.339],[-9.661,0.27],[-9.729,0.204],[-9.726,0.136],[-9.69,0.068],[-9.717,0.0],[-9.693,-0.068],[-9.701,-0.135],[-9.703,-0.203],[-9.695,-0.271],[-9.71,-0.339],[-9.708,-0.407],[-9.69,-0.474],[-9.706,-0.543],[-9.69,-0.61],[-9.676,1.222],[-9.716,1.159],[-9.708,1.089],[-9.686,1.018],[-9.694,0.951],[-9.685,0.881],[-9.69,0.814],[-9.726,0.748],[-9.701,0.678],[-9.678,0.609],[-9.71,0.543],[-9.711,0.475],[-9.699,0.407],[-9.699,0.339],[-9.71,0.271],[-9.715,0.204],[-9.698,0.135],[-9.689,0.068],[-9.695,0.0],[-9.719,-0.068],[-9.715,-0.136],[-9.692,-0.203],[-9.756,-0.273],[-9.75,-0.34],[-9.679,-0.406],[-9.72,-0.475],[-9.68,-0.541],[-9.701,-0.61],[-9.671,1.222],[-9.675,1.154],[-9.695,1.087],[-9.722,1.022],[-9.698,0.951],[-9.673,0.88],[-9.715,0.816],[-9.678,0.745],[-9.725,0.68],[-9.718,0.611],[-9.73,0.544],[-9.725,0.476],[-9.722,0.407],[-9.714,0.339],[-9.694,0.271],[-9.698,0.203],[-9.7,0.135],[-9.704,0.068],[-9.689,0.0],[-9.686,-0.068],[-9.728,-0.136],[-9.677,-0.203],[-9.721,-0.272],[-9.74,-0.34],[-9.68,-0.406],[-9.728,-0.476],[-9.698,-0.542],[-9.729,-0.612],[-9.674,0.744],[-9.673,0.473],[-9.699,0.407],[-9.704,0.203],[-9.679,0.068],[-9.674,0.0],[-9.662,-0.067],[-9.705,-0.136],[-9.704,-0.271],[-9.703,-0.339],[-9.66,-0.405],[-9.694,-0.542]],"eps":{"0.5":{"lead_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"rear_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],"lead_boxes":[[12.699,-0.0,0.078,1.779]],"rear_boxes":[[-10.636,0.297,0.106,1.782],[-9.704,0.308,0.104,1.841]]},"1.0":{"lead_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"rear_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"lead_boxes":[[12.699,-0.0,0.078,1.779]],"rear_boxes":[[-10.171,0.308,1.037,1.841]]},"2.0":{"lead_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"rear_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"lead_boxes":[[12.699,-0.0,0.078,1.779]],"rear_boxes":[[-10.171,0.308,1.037,1.841]]},"3.0":{"lead_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"rear_lab":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"lead_boxes":[[12.699,-0.0,0.078,1.779]],"rear_boxes":[[-10.171,0.308,1.037,1.841]]}}};
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const REDUCE = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- ① 一帧一帧 ---------- */
+const LEAD = DATA.lead;                       // 前车 105 个点 (x, y)
+const REAR_X = 12.7, FRONT_X = 17.3, HALF_W = 0.95, TRUE_C = 15.0;
+const lx = LEAD.map((p) => p[0]), ly = LEAD.map((p) => p[1]);
+const XMIN = Math.min(...lx), XMAX = Math.max(...lx), YMIN = Math.min(...ly), YMAX = Math.max(...ly);
+const BOXC = (XMIN + XMAX) / 2;
+const VA = { cx: 9.0, cy: 0, w: 23, h: 8.0 };     // 总图
+const VB = { cx: 14.7, cy: 0, w: 7.8, h: 3.6 };   // 放大前车
+
+const FR = [
+  { v: VA, car: "solid",
+    cap: "总图（从天上往下看，x 往前、y 往左）。雷达装在自车车顶，位置 (0, 0)。前车停在正前方：车尾在 <b>12.7</b> 米，车头在 <b>17.3</b> 米，车长 4.6 米，真中心在正中间 <b>15.0</b> 米。" },
+  { v: VA, car: "solid", rays: "sweep", sweepMs: 1600,
+    cap: "雷达往四面八方打激光，这里只画朝前的一小把（每个方向画一根）。光走直线，<b>碰到第一个东西就弹回来</b>。朝着前车的那些，全碰在车尾上，蓝点就是它们带回来的点。" },
+  { v: VA, car: "solid", rays: "all", shadow: true,
+    cap: "所以车尾后面这一块（红色）激光一根也进不去：前车的侧面、车头都在里面，<b>一个点都没有</b>。",
+    sub: "车顶本来能打到，可车顶只比雷达低 0.3 米，激光正好都错过了（「前车框为什么偏」的侧视图讲过）。" },
+  { v: VB, pts: true,
+    cap: "放大。算法看不到真车，手里只有这 <b>105</b> 个点。它们排成一条竖线，全在 x ≈ 12.7，也就是车尾那一面。",
+    sub: "上下 5 根激光打在车尾同一竖条上，从天上看叠在一起，所以看起来只有 21 个点。" },
+  { v: VB, pts: true, mm: true, box: true,
+    cap: "第 3 步的 min / max：x 最小 <b>12.66</b>、最大 <b>12.74</b>；y 最小 <b>−0.89</b>、最大 <b>0.89</b>。四条线围成的框只有 <b>0.08</b> 米厚，是一片薄片。" },
+  { v: VB, pts: true, box: true, cmp: true, car: "dash",
+    cap: "框中心 = 两头的中间 = <b>12.70</b>，落在车尾上。真中心在车身正中间 <b>15.00</b>。差 <b>2.30</b> 米，正好半个车长（4.6 ÷ 2）。",
+    sub: "框中心偏向雷达这边：算法只框得住看得见的那一面，看不见的车身它不知道有多长。" },
+];
+function drawMain(v, f, sweep) {
+  const svg = $("main");
+  const W = Math.max(280, Math.floor(svg.parentElement.clientWidth));
+  const H = Math.round(Math.min(400, Math.max(230, W * 0.38)));
+  const s = Math.min(W / v.w, H / v.h);
+  const X = (x) => W / 2 + (x - v.cx) * s, Y = (y) => H / 2 - (y - v.cy) * s;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
+  svg.innerHTML = "";
+  const rect = (x0, y0, x1, y1, cls) => el("rect", { x: X(x0), y: Y(y1), width: (x1 - x0) * s, height: (y1 - y0) * s, class: cls }, svg);
+  const xRight = v.cx + W / 2 / s + 1;
+
+  // 自车
+  rect(-2.3, -HALF_W, 2.3, HALF_W, "ego");
+  el("circle", { cx: X(0), cy: Y(0), r: 4, class: "lidar" }, svg);
+  if (v === VA || v.w > 12) el("text", { x: X(0), y: Y(-HALF_W) + 17, class: "lab muted halo", "text-anchor": "middle" }, svg, "自车（雷达在车顶 0, 0）");
+
+  // 前车（真车）
+  if (f.car === "solid") rect(REAR_X, -HALF_W, FRONT_X, HALF_W, "car");
+
+  // 激光
+  if (f.rays) {
+    const n = 41, shown = f.rays === "sweep" ? Math.floor(sweep * n) : n;
+    for (let k = 0; k < shown; k++) {
+      const az = (-8 + 0.4 * k) * Math.PI / 180, hit = Math.abs(az) <= 4.0001 * Math.PI / 180;
+      const x2 = hit ? REAR_X : xRight, y2 = x2 * Math.tan(az);
+      el("line", { x1: X(0), y1: Y(0), x2: X(x2), y2: Y(y2), class: "ray" + (hit ? "" : " miss") }, svg);
+      if (hit) el("circle", { cx: X(x2), cy: Y(y2), r: 2.4, class: "pt" }, svg);
+    }
+  }
+  if (f.shadow) {
+    const xe = xRight + 5, k = HALF_W / REAR_X;
+    el("polygon", { points: [[REAR_X, HALF_W], [xe, xe * k], [xe, -xe * k], [REAR_X, -HALF_W]].map(([x, y]) => X(x) + "," + Y(y)).join(" "), class: "shadow" }, svg);
+    el("text", { x: X(16.5), y: Y(1.55) - 4, class: "lab warn halo", "text-anchor": "middle" }, svg, "激光到不了");
+  }
+  if (f.car === "solid") el("text", { x: X(15), y: Y(-HALF_W) + 17, class: "lab halo", "text-anchor": "middle" }, svg, "前车（真车）");
+
+  // 放大后：点、min/max、框
+  if (f.car === "dash") rect(REAR_X, -HALF_W, FRONT_X, HALF_W, "car dash");
+  if (f.mm) {
+    const top = 0, bot = H;
+    el("line", { x1: X(XMIN), x2: X(XMIN), y1: top, y2: bot, class: "mm" }, svg);
+    el("line", { x1: X(XMAX), x2: X(XMAX), y1: top, y2: bot, class: "mm" }, svg);
+    el("line", { x1: 0, x2: W, y1: Y(YMAX), y2: Y(YMAX), class: "mm" }, svg);
+    el("line", { x1: 0, x2: W, y1: Y(YMIN), y2: Y(YMIN), class: "mm" }, svg);
+    el("text", { x: X(XMIN) - 5, y: 16, class: "lab c2 num halo", "text-anchor": "end" }, svg, "x 最小 12.66");
+    el("text", { x: X(XMAX) + 5, y: 16, class: "lab c2 num halo" }, svg, "x 最大 12.74");
+    el("text", { x: W - 6, y: Y(YMAX) - 6, class: "lab c2 num halo", "text-anchor": "end" }, svg, "y 最大 0.89");
+    el("text", { x: W - 6, y: Y(YMIN) + 17, class: "lab c2 num halo", "text-anchor": "end" }, svg, "y 最小 −0.89");
+  }
+  if (f.box) rect(XMIN, YMIN, XMAX, YMAX, "box");
+  if (f.pts) LEAD.forEach(([x, y]) => el("circle", { cx: X(x), cy: Y(y), r: 2.6, class: "pt" }, svg));
+  if (f.pts && !f.mm && !f.cmp) el("text", { x: X(REAR_X) + 14, y: Y(0.55), class: "lab acc halo" }, svg, "算法手里只有这 105 个点");
+  if (f.box && !f.cmp) el("text", { x: X(XMAX) + 12, y: Y(0) + 5, class: "lab halo" }, svg, "框：长 0.08 × 宽 1.78 米");
+  if (f.cmp) {
+    el("line", { x1: X(BOXC), x2: X(TRUE_C), y1: Y(0), y2: Y(0), class: "dline" }, svg);
+    el("text", { x: X((BOXC + TRUE_C) / 2), y: Y(0) - 8, class: "lab warn num halo", "text-anchor": "middle" }, svg, "差 2.30 米");
+    el("circle", { cx: X(BOXC), cy: Y(0), r: 6, class: "bc" }, svg);
+    el("circle", { cx: X(TRUE_C), cy: Y(0), r: 7, class: "tc" }, svg);
+    el("text", { x: X(BOXC) + 10, y: Y(0) + 20, class: "lab acc halo" }, svg, "框中心 12.70");
+    el("text", { x: X(TRUE_C) + 11, y: Y(0) + 18, class: "lab halo" }, svg, "真中心 15.00");
+    const yb = -HALF_W - 0.32;
+    el("path", { d: `M ${X(REAR_X)} ${Y(yb) - 5} V ${Y(yb)} H ${X(FRONT_X)} V ${Y(yb) - 5} M ${X(TRUE_C)} ${Y(yb)} V ${Y(yb) - 5}`, class: "brk" }, svg);
+    el("text", { x: X(TRUE_C), y: Y(yb) + 16, class: "lab muted halo", "text-anchor": "middle" }, svg, "车长 4.6 米，一半 2.3 米");
+    el("text", { x: X(FRONT_X) - 4, y: Y(HALF_W) - 7, class: "lab muted halo", "text-anchor": "end" }, svg, "虚线 = 真车（算法看不到）");
+  }
+}
+
+/* ---------- 通用：一帧一帧 + 平滑放大 ---------- */
+function makeStepper(o) {
+  let step = 0, view = { ...o.frames[0].v }, anim = null;
+  function render() {
+    const f = o.frames[step];
+    $(o.cap).innerHTML = f.cap + (f.sub ? `<span class="sub">${f.sub}</span>` : "");
+    $(o.no).textContent = `第 ${step + 1} / ${o.frames.length} 帧`;
+    $(o.prev).disabled = step === 0;
+    $(o.next).disabled = step === o.frames.length - 1;
+    if (o.onStep) o.onStep(f);
+    if (anim) cancelAnimationFrame(anim);
+    const from = { ...view }, to = f.v, t0 = performance.now();
+    const zoomMs = REDUCE ? 0 : 650, sweepMs = REDUCE ? 0 : (f.sweepMs || 0);
+    const tick = (now) => {
+      const a = zoomMs ? Math.min(1, (now - t0) / zoomMs) : 1;
+      const e = a < .5 ? 2 * a * a : 1 - Math.pow(-2 * a + 2, 2) / 2;
+      view = { cx: from.cx + (to.cx - from.cx) * e, cy: from.cy + (to.cy - from.cy) * e,
+               w: from.w + (to.w - from.w) * e, h: from.h + (to.h - from.h) * e };
+      const sw = sweepMs ? Math.min(1, (now - t0) / sweepMs) : 1;
+      o.draw(view, f, sw);
+      if (a < 1 || sw < 1) anim = requestAnimationFrame(tick); else { view = { ...to }; anim = null; }
+    };
+    o.draw(view, f, sweepMs ? 0 : 1);
+    anim = requestAnimationFrame(tick);
+  }
+  $(o.prev).addEventListener("click", () => { if (step > 0) { step--; render(); } });
+  $(o.next).addEventListener("click", () => { if (step < o.frames.length - 1) { step++; render(); } });
+  $(o.reset).addEventListener("click", () => { step = 0; render(); });
+  return { render, redraw: () => o.draw(view, o.frames[step], 1) };
+}
+
+const S1 = makeStepper({ frames: FR, draw: drawMain, cap: "cap", no: "stepno", prev: "prev", next: "next", reset: "reset" });
+
+/* ---------- ② 两辆车 + eps ---------- */
+const REAR = DATA.rear;                         // 后车 177 个点
+const REAR_C = [-12.0, 0.3], LEAD_C = [15.0, 0.0], CL = 4.6, CW = 1.9;
+// 后车：车顶那条（堆 0）和车头那面（堆 1）之间最近的一对点
+const rearLab05 = DATA.eps["0.5"].rear_lab;
+let GAP = { d: Infinity };
+REAR.forEach((p, i) => { if (rearLab05[i] !== 0) return;
+  REAR.forEach((q, j) => { if (rearLab05[j] !== 1) return;
+    const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < GAP.d) GAP = { d, p, q }; }); });
+// 前车：离 (12.7, 0) 最近的一个点，用来画 eps 圈
+const LEAD_MID = LEAD.reduce((b, p) => (Math.hypot(p[0] - 12.7, p[1]) < Math.hypot(b[0] - 12.7, b[1]) ? p : b), LEAD[0]);
+
+const VO = { cx: 1.5, cy: 0.2, w: 34, h: 5.6 };
+const VR = { cx: -11.6, cy: 0.3, w: 6.4, h: 3.2 };
+const VF = { cx: 14.6, cy: 0.0, w: 6.8, h: 3.2 };
+
+const FR2 = [
+  { v: VO, eps: null,
+    cap: "总图（从天上往下看，x 往前）。你的车在中间，雷达在车顶。<b>后车</b>在你后面，车头朝着你；<b>前车</b>在你前面，车尾朝着你。两辆车都只被打到朝着雷达的那一面，后车车顶上还多打到一条。" },
+  { v: VR, eps: "0.5", focus: "rear", circle: "rear",
+    cap: "放大后车，eps = <b>0.5</b>。车头那面（152 个点）和车顶上那一条（25 个点）之间有一条 <b>0.86</b> 米宽的缝，一个点都没有。eps 圈半径只有 0.5，从缝这边够不着那边，所以切成 <b>2</b> 堆（蓝、橙），画出 2 个框。",
+    sub: "这就是第 2 步讲的：eps 太小，把一辆车切碎了。缝为什么在那里，「车顶上的缝」那张侧视图讲过。" },
+  { v: VR, eps: "1.0", focus: "rear", circle: "rear",
+    cap: "eps 换成 <b>1.0</b>：圈比缝宽，跨过去了，连成 <b>1</b> 堆、1 个框。eps 管的就是这一件事：分成几堆。" },
+  { v: VF, eps: "0.5", focus: "lead", circle: "lead",
+    cap: "再放大前车，eps 还是 <b>0.5</b>。车尾这 105 个点挨得很近（左右相邻只隔约 0.09 米），0.5 的圈里一大把邻居，所以本来就是 <b>1</b> 堆。框是那片 0.08 米厚的薄片，中心偏 <b>2.30</b> 米。" },
+  { v: VF, eps: "3.0", focus: "lead", circle: "lead",
+    cap: "eps 一路加到 <b>3.0</b>：还是 1 堆，还是那片薄片，还是偏 <b>2.30</b>。圈再大也变不出车头那一面的点，因为激光根本没打到那里。" },
+  { v: VO, eps: "1.0",
+    cap: "总结：eps 只管“分成几堆”，后车会不会被切开看它。前车偏 2.30 米是因为“只看得到车尾”，跟 eps 无关。下面的表是 4 个 eps 的全部结果。" },
+];
+
+function drawEps(v, f) {
+  const svg = $("eps");
+  const W = Math.max(280, Math.floor(svg.parentElement.clientWidth));
+  const H = Math.round(Math.min(360, Math.max(230, W * 0.34)));
+  const s = Math.min(W / v.w, H / v.h);
+  const X = (x) => W / 2 + (x - v.cx) * s, Y = (y) => H / 2 - (y - v.cy) * s;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W); svg.setAttribute("height", H);
+  svg.innerHTML = "";
+  const zoomed = v.w < 12;
+  const rect = (x0, y0, x1, y1, cls) => el("rect", { x: X(x0), y: Y(y1), width: Math.max(2, (x1 - x0) * s), height: (y1 - y0) * s, class: cls }, svg);
+  const info = f.eps ? DATA.eps[f.eps] : null;
+
+  // 自车、真车
+  rect(-2.3, -HALF_W, 2.3, HALF_W, "ego");
+  el("circle", { cx: X(0), cy: Y(0), r: 4, class: "lidar" }, svg);
+  rect(REAR_C[0] - CL / 2, REAR_C[1] - CW / 2, REAR_C[0] + CL / 2, REAR_C[1] + CW / 2, "car dash");
+  rect(LEAD_C[0] - CL / 2, LEAD_C[1] - CW / 2, LEAD_C[0] + CL / 2, LEAD_C[1] + CW / 2, "car dash");
+
+  // eps 圈（画在点下面）
+  if (f.circle && info) {
+    const r = Number(f.eps);
+    if (f.circle === "rear") {
+      const ok = r >= GAP.d;
+      el("circle", { cx: X(GAP.p[0]), cy: Y(GAP.p[1]), r: r * s, class: "epsc " + (ok ? "ok" : "no") }, svg);
+      el("line", { x1: X(GAP.p[0]), y1: Y(GAP.p[1]), x2: X(GAP.q[0]), y2: Y(GAP.q[1]), class: "gap" }, svg);
+      el("text", { x: X(GAP.p[0]) - r * s - 6, y: Y(GAP.p[1]) + 5, class: "lab halo " + (ok ? "ok" : "warn"), "text-anchor": "end" }, svg,
+        `eps 圈 ${f.eps}：${ok ? "够得着" : "够不着"}`);
+    } else {
+      el("circle", { cx: X(LEAD_MID[0]), cy: Y(LEAD_MID[1]), r: r * s, class: "epsc ok" }, svg);
+      const off = r * s * 0.72 + 4;
+      el("text", { x: Math.max(72, X(LEAD_MID[0]) - off), y: Math.max(18, Y(LEAD_MID[1]) - off), class: "lab ok halo", "text-anchor": "end" }, svg, `eps 圈 ${f.eps}`);
+    }
+  }
+
+  // 框
+  if (info) {
+    ["rear_boxes", "lead_boxes"].forEach((k) => info[k].forEach((b, i) =>
+      rect(b[0] - b[2] / 2, b[1] - b[3] / 2, b[0] + b[2] / 2, b[1] + b[3] / 2, "box" + (i ? " c1" : ""))));
+  }
+  // 点
+  const pr = zoomed ? 2.4 : 1.6;
+  REAR.forEach(([x, y], i) => el("circle", { cx: X(x), cy: Y(y), r: pr, class: "pt" + (info && info.rear_lab[i] ? " c1" : "") }, svg));
+  LEAD.forEach(([x, y], i) => el("circle", { cx: X(x), cy: Y(y), r: pr, class: "pt" + (info && info.lead_lab[i] ? " c1" : "") }, svg));
+  // 真中心
+  [REAR_C, LEAD_C].forEach(([x, y]) => el("circle", { cx: X(x), cy: Y(y), r: zoomed ? 6 : 4.5, class: "tc" }, svg));
+
+  if (!zoomed) {
+    el("text", { x: X(0), y: Y(-HALF_W) + 17, class: "lab muted halo", "text-anchor": "middle" }, svg, "你的车");
+    el("text", { x: X(REAR_C[0]), y: Y(REAR_C[1] - CW / 2) + 17, class: "lab halo", "text-anchor": "middle" }, svg, "后车（车头朝你 →）");
+    el("text", { x: X(LEAD_C[0]), y: Y(LEAD_C[1] - CW / 2) + 17, class: "lab halo", "text-anchor": "middle" }, svg, "前车（← 车尾朝你）");
+  }
+  if (f.focus === "rear") {
+    const top = Y(REAR_C[1] + CW / 2) - 8;
+    el("text", { x: X(-9.70) + 6, y: top, class: "lab halo" }, svg, "车头那面");
+    el("text", { x: X(-10.64) - 6, y: top, class: "lab halo", "text-anchor": "end" }, svg, "车顶一条");
+    const yb = REAR_C[1] - CW / 2 - 0.2;
+    el("path", { d: `M ${X(-10.583)} ${Y(yb) - 5} V ${Y(yb)} H ${X(-9.756)} V ${Y(yb) - 5}`, class: "brk" }, svg);
+    el("text", { x: X(-10.17), y: Y(yb) + 16, class: "lab warn halo", "text-anchor": "middle" }, svg, "缝 0.86 米");
+    const n = info.rear_boxes.length;
+    el("text", { x: X(REAR_C[0] - CL / 2) + 8, y: Y(REAR_C[1] + CW / 2) + 20, class: "lab big halo " + (n > 1 ? "warn" : "ok") }, svg, n > 1 ? `分成 ${n} 堆` : "分成 1 堆");
+  }
+  if (f.focus === "lead") {
+    const b = info.lead_boxes[0];
+    el("line", { x1: X(b[0]), x2: X(LEAD_C[0]), y1: Y(0), y2: Y(0), class: "dline" }, svg);
+    el("circle", { cx: X(b[0]), cy: Y(0), r: 5.5, class: "bc" }, svg);
+    el("text", { x: X((b[0] + LEAD_C[0]) / 2), y: Y(0) - 8, class: "lab warn num halo", "text-anchor": "middle" }, svg, "偏 2.30 米");
+    el("text", { x: X(12.62) - 6, y: Y(HALF_W) - 8, class: "lab big ok halo", "text-anchor": "end" }, svg, "分成 1 堆");
+    el("text", { x: X(12.62) - 6, y: Y(-HALF_W) + 16, class: "lab halo", "text-anchor": "end" }, svg, "车尾 105 个点");
+  }
+}
+
+const S2 = makeStepper({ frames: FR2, draw: drawEps, cap: "cap2", no: "stepno2", prev: "prev2", next: "next2", reset: "reset2",
+  onStep: (f) => document.querySelectorAll("[data-row]").forEach((tr) => tr.classList.toggle("on", !!f.circle && tr.dataset.row === f.eps)) });
+
+let rt;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { S1.redraw(); S2.redraw(); }, 80); });
+S1.render(); S2.render();
+</script>
+
+</body>
+</html>
