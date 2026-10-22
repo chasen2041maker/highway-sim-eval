@@ -172,7 +172,7 @@ table.t td.far { color: var(--muted); }
     <div class="tblwrap">
       <table class="t">
         <tr><th>每一帧</th><th>做什么</th><th>用到什么</th></tr>
-        <tr><td>① 猜</td><td>每条轨迹各自 predict 0.1 秒</td><td>第 2 步你写的 KalmanCV，x、y 各一个</td></tr>
+        <tr><td>① 猜</td><td>每条轨迹各自 predict 0.1 秒</td><td>第 2 步的 KalmanCV，x、y 各一个</td></tr>
         <tr><td>② 配对</td><td>距离表（几条轨迹 × 几个框）→ 匈牙利算法一行一列只挑一个、总距离最小 → 超过门槛 2 米的不算</td><td>scipy 的 <span class="num">linear_sum_assignment</span></td></tr>
         <tr><td>③ 管编号</td><td>配上的：update，misses 清零<br>没配上的轨迹：misses + 1，超过 10 才删<br>没人认领的框：新轨迹，发新编号</td><td>编号只增不减，删掉的号不再用</td></tr>
       </table>
@@ -360,7 +360,7 @@ function setOn(btns, on) { btns.forEach(b => b.classList.toggle('on', b === on))
   const who = j => NAMES[f.det_who[j]];
   const steps = [
     { t: '1.8 秒结束时：手上 3 条轨迹', hl: [],
-      c: `每条轨迹 = 一个编号 + 一个卡尔曼（x 方向一个、y 方向一个，就是第 2 步你写的 KalmanCV）。箭头是估出来的速度，画的是“1 秒后会到哪”：1 号 ${m(P(1).vx)} m/s 在靠近，2 号 ${sg(P(2).vx)} 在拉开，3 号 ${m(P(3).vx)} 靠近得最快。`,
+      c: `每条轨迹 = 一个编号 + 一个卡尔曼（x 方向一个、y 方向一个，就是第 2 步的 KalmanCV）。箭头是估出来的速度，画的是“1 秒后会到哪”：1 号 ${m(P(1).vx)} m/s 在靠近，2 号 ${sg(P(2).vx)} 在拉开，3 号 ${m(P(3).vx)} 靠近得最快。`,
       draw() { prev.forEach(p => dot(svg, p, p.id + ' 号', { arrow: true })); }, table: 'tracks0' },
     { t: '① 猜：每条轨迹各自 predict 0.1 秒', hl: [0, 1],
       c: `虚线圈是猜的位置。1 号：${P(1).x.toFixed(2)} + (${m(P(1).vx)} × 0.1) = ${Q(1).x.toFixed(2)}；3 号：${P(3).x.toFixed(2)} + (${m(P(3).vx)} × 0.1) = ${Q(3).x.toFixed(2)}。和第 2 步一模一样，只是三辆车各猜各的。`,
