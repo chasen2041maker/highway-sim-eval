@@ -69,6 +69,7 @@ footer { color: var(--muted); font-size: 13px; }
     <h2>Tracking</h2>
     <div class="grid">
       <a class="card" href="a6_kalman.html"><span class="n">A6</span><span class="t">Kalman filter: predict, then measure</span><span class="zh">卡尔曼：猜一步，量一下</span><span class="d">One frame of a 1D Kalman filter on a distance number line: predict, measure, blend by confidence. On a frame where differencing reads −7.5 m/s, the filter only nudges its speed from −1.81 to −1.97.</span></a>
+      <a class="card" href="a6_multi_track.html"><span class="n">A6</span><span class="t">Multi-object tracking: who is who</span><span class="zh">多车跟踪：谁是谁</span><span class="d">Three cars, radar boxes with no names in shuffled order. Each frame: predict every track, match by a distance table and the Hungarian algorithm with a 2 m gate, then manage IDs. Includes a 5-frame occlusion (keep 10 frames: same ID; keep 3: the car comes back as a new ID) and a guardrail false alarm that lives 1.1 s as a ghost track.</span></a>
     </div>
   </section>
 
