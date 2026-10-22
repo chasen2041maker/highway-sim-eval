@@ -76,6 +76,7 @@ table.t th { font-weight: 600; background: var(--chip); white-space: nowrap; }
 table.t td.n { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 table.t td.pick { background: color-mix(in srgb, var(--accent) 20%, transparent); font-weight: 700; }
 table.t td.far { color: var(--muted); }
+table.t td.cur { background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 700; }
 .tblwrap { overflow-x: auto; min-width: 0; }
 .idtag { font-weight: 700; white-space: nowrap; }
 .note { font-size: 15px; color: var(--muted); max-width: 86ch; }
@@ -123,6 +124,7 @@ table.t td.far { color: var(--muted); }
   <section class="panel" aria-labelledby="h1">
     <h2 id="h1">① 一帧慢放：1.9 秒那一帧，三件事</h2>
     <div class="fig"><svg id="s1" viewBox="0 0 900 346" role="img" aria-label="1.9 秒那一帧：猜、配对、合"></svg></div>
+    <div class="legend"><span><i class="carsw"></i>真车（跟踪器看不到，画给你对照）</span><span><i class="ring"></i>轨迹猜的位置（一条轨迹一个圈）</span><span><i class="sq"></i>雷达这一帧的框</span><span><i class="dot"></i>合完的位置</span></div>
     <div class="stepbar">
       <button class="btn" id="b1">◀ 上一步</button>
       <button class="btn primary" id="f1">下一步 ▶</button>
@@ -360,7 +362,7 @@ function setOn(btns, on) { btns.forEach(b => b.classList.toggle('on', b === on))
   const who = j => NAMES[f.det_who[j]];
   const steps = [
     { t: '1.8 秒结束时：手上 3 条轨迹', hl: [],
-      c: `每条轨迹 = 一个编号 + 一个卡尔曼（x 方向一个、y 方向一个，就是第 2 步的 KalmanCV）。箭头是估出来的速度，画的是“1 秒后会到哪”：1 号 ${m(P(1).vx)} m/s 在靠近，2 号 ${sg(P(2).vx)} 在拉开，3 号 ${m(P(3).vx)} 靠近得最快。`,
+      c: `轨迹就是跟踪器给每辆车记的一个小本子：一个编号 + 一个卡尔曼（x 方向一个、y 方向一个，就是第 2 步的 KalmanCV），记着这辆车上一帧在哪、多快。灰色的是真车，跟踪器看不到，只是画给你对照。箭头是估出来的速度，画的是“1 秒后会到哪”：1 号 ${m(P(1).vx)} m/s 在靠近，2 号 ${sg(P(2).vx)} 在拉开，3 号 ${m(P(3).vx)} 靠近得最快。`,
       draw() { prev.forEach(p => dot(svg, p, p.id + ' 号', { arrow: true })); }, table: 'tracks0' },
     { t: '① 猜：每条轨迹各自 predict 0.1 秒', hl: [0, 1],
       c: `虚线圈是猜的位置。1 号：${P(1).x.toFixed(2)} + (${m(P(1).vx)} × 0.1) = ${Q(1).x.toFixed(2)}；3 号：${P(3).x.toFixed(2)} + (${m(P(3).vx)} × 0.1) = ${Q(3).x.toFixed(2)}。和第 2 步一模一样，只是三辆车各猜各的。`,
@@ -368,12 +370,33 @@ function setOn(btns, on) { btns.forEach(b => b.classList.toggle('on', b === on))
     { t: '雷达这一帧给了 3 个框', hl: [],
       c: `方块是这一帧的框。“框 0、框 1、框 2”只是这一帧的顺序：框 0 其实是${who(0)}，框 2 才是${who(2)}。跟踪器不知道这些，只能靠位置认。`,
       draw() { f.pred.forEach(p => ringMark(svg, p, p.id + ' 号')); f.det.forEach(([x, y], j) => detMark(svg, x, y, '框 ' + j)); }, table: 'pred' },
-    { t: '② 距离表：每个圈到每个框都量一下', hl: [2],
-      c: `3 条轨迹 × 3 个框 = 9 个距离（下表）。图上的虚线就是这 9 段。离得近的那段太短（0.2 米左右），在图上几乎看不见。`,
+    ...[0, 1, 2].map(r => ({
+      t: `② 距离表（${r + 1} / 3）：${f.pred[r].id} 号的圈到每个框量一下`, hl: [2], rows: r + 1,
+      c: r === 0
+        ? `${f.pred[0].id} 号的虚线圈，是 1 号轨迹猜的“我跟的那辆车现在在哪”（${f.pred[0].x.toFixed(2)}, ${m(f.pred[0].y)}）。从这个圈到 3 个框各拉一条线：到框 0 是 ${f.cost[0][0].toFixed(2)} 米，到框 1 是 ${f.cost[0][1].toFixed(2)} 米，到框 2 是 ${f.cost[0][2].toFixed(2)} 米。这 3 个数就是下表 1 号那一行。`
+        : r === 1
+        ? `再从 2 号的圈拉 3 条线：${f.cost[1].map(c => c.toFixed(2)).join('、')} 米 → 表的第 2 行。`
+        : `最后 3 号的圈：${f.cost[2].map(c => c.toFixed(2)).join('、')} 米 → 第 3 行。3 个圈 × 3 个框 = 9 条线 = 表里 9 个数。每一行都只有一个很小的数（0.2～0.3 米），其他都是好几米：下一步就是把这几个小数挑出来。`,
       draw() {
-        f.pred.forEach(p => f.det.forEach(([x, y]) => E('line', { x1: X(p.x), y1: Y(p.y), x2: X(x), y2: Y(y), stroke: idc(p.id), 'stroke-width': 1.5, 'stroke-dasharray': '3 5', 'stroke-opacity': 0.7 }, svg)));
-        f.pred.forEach(p => ringMark(svg, p, p.id + ' 号')); f.det.forEach(([x, y], j) => detMark(svg, x, y, '框 ' + j));
-      }, table: 'cost' },
+        f.pred.forEach((p, i) => {
+          if (i > r) return;
+          f.det.forEach(([x, y], j) => {
+            const on = i === r;
+            E('line', { x1: X(p.x), y1: Y(p.y), x2: X(x), y2: Y(y), stroke: idc(p.id), 'stroke-width': on ? 2.5 : 1.5, 'stroke-dasharray': '5 4', 'stroke-opacity': on ? 0.95 : 0.25 }, svg);
+          });
+        });
+        f.pred.forEach((p, i) => ringMark(svg, p, i === r ? p.id + ' 号猜的位置' : p.id + ' 号'));
+        f.det.forEach(([x, y], j) => detMark(svg, x, y, '框 ' + j));
+        const p = f.pred[r];
+        f.det.forEach(([x, y], j) => {
+          const c = f.cost[r][j];
+          let lx, ly;
+          if (c < 1) { lx = X(x) + 18; ly = Y(y) + 5; }
+          else { lx = (X(p.x) + X(x)) / 2; ly = (Y(p.y) + Y(y)) / 2 - 8; }
+          T(svg, lx, ly, c.toFixed(2) + ' 米', 'tx b halo', { 'text-anchor': c < 1 ? 'start' : 'middle', style: `fill:${idc(p.id)}` });
+        });
+      }, table: 'costrows'
+    })),
     { t: '匈牙利算法：一行一列只挑一个，总距离最小', hl: [3, 4],
       c: (() => { const ps = f.pairs.map(([i, j]) => `${f.pred[i].id} 号 ↔ 框 ${j}（${f.cost[i][j].toFixed(2)}）`); const tot = f.pairs.reduce((s, [i, j]) => s + f.cost[i][j], 0);
         return `挑出来的是 ${ps.join('、')}，合计 ${tot.toFixed(2)} 米，换任何别的配法加起来都更大。三对都在门槛 ${GATE} 米以内，都算数。scipy 一行就做完：linear_sum_assignment(dist)。`; })(),
@@ -389,11 +412,13 @@ function setOn(btns, on) { btns.forEach(b => b.classList.toggle('on', b === on))
     return `<table class="t"><tr><th>${title}</th><th>x（米，前）</th><th>y（米，左）</th>${withV ? '<th>速度 vx（m/s）</th>' : ''}</tr>` +
       list.map(p => `<tr><td class="idtag" style="color:${idc(p.id)}">${p.id} 号</td><td class="n">${p.x.toFixed(2)}</td><td class="n">${m(p.y)}</td>${withV ? `<td class="n">${m(p.vx)}</td>` : ''}</tr>`).join('') + '</table>';
   }
-  function costTable(pick) {
+  function costTable(pick, nrows) {
     const pickSet = new Set(f.pairs.map(([i, j]) => i + ',' + j));
-    return `<table class="t"><tr><th>距离（米）</th>${f.det.map((_, j) => `<th>框 ${j}</th>`).join('')}</tr>` +
-      f.pred.map((p, i) => `<tr><td class="idtag" style="color:${idc(p.id)}">${p.id} 号（猜的位置）</td>` +
-        f.cost[i].map((c, j) => `<td class="n ${pick ? (pickSet.has(i + ',' + j) ? 'pick' : 'far') : ''}">${c.toFixed(2)}</td>`).join('') + '</tr>').join('') + '</table>';
+    const n = nrows == null ? f.pred.length : nrows;
+    return `<table class="t"><tr><th>距离（米）</th>${f.det.map((_, j) => `<th>到框 ${j}</th>`).join('')}</tr>` +
+      f.pred.map((p, i) => `<tr><td class="idtag" style="color:${idc(p.id)}">从 ${p.id} 号的圈</td>` +
+        f.cost[i].map((c, j) => i >= n ? '<td class="n far">?</td>' :
+          `<td class="n ${pick ? (pickSet.has(i + ',' + j) ? 'pick' : 'far') : (nrows != null && i === n - 1 ? 'cur' : '')}">${c.toFixed(2)}</td>`).join('') + '</tr>').join('') + '</table>';
   }
   let s = 0;
   function draw() {
@@ -405,7 +430,7 @@ function setOn(btns, on) { btns.forEach(b => b.classList.toggle('on', b === on))
     $('#cap1').textContent = st.c;
     lines.forEach((l, i) => l.classList.toggle('on', st.hl.includes(i)));
     $('#no1').textContent = `第 ${s + 1} / ${steps.length} 步`;
-    const tb = { tracks0: tracksTable(prev, true, '1.8 秒的轨迹'), pred: tracksTable(f.pred, false, '猜的位置'), cost: costTable(false), costpick: costTable(true), post: tracksTable(f.post, true, '合完') }[st.table];
+    const tb = { tracks0: tracksTable(prev, true, '1.8 秒的轨迹'), pred: tracksTable(f.pred, false, '猜的位置'), costrows: costTable(false, st.rows), costpick: costTable(true), post: tracksTable(f.post, true, '合完') }[st.table];
     $('#tb1').innerHTML = tb;
     $('#b1').disabled = s === 0; $('#f1').disabled = s === steps.length - 1;
   }
