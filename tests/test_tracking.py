@@ -14,3 +14,57 @@ def test_diff_speed_one_noisy_frame():
     # 第 2 帧多测了 0.3 米：它前后两个速度一个 +3、一个 -3（各偏 3 m/s），噪声被 ÷ 0.1 放大 10 倍
     v = diff_speed(np.array([20.0, 20.3, 20.0]), 0.1)
     assert np.allclose(v, [3.0, -3.0])
+
+
+# ---------------- A6 第 2 步：KalmanCV（数字都是手算的）
+
+from ads.tracking import KalmanCV
+
+
+def test_predict_moves_by_speed():
+    # 猜：12.31 + (-1.81 × 0.1) = 12.129，速度不变
+    kf = KalmanCV(12.31, -1.81)
+    kf.predict(0.1)
+    assert np.allclose(kf.x, [12.129, -1.81])
+
+
+def test_predict_grows_uncertainty():
+    # P = diag(0.01, 0.04)，q = 1，dt = 0.1：
+    # F P Fᵀ = [[0.01 + 0.04×0.01, 0.04×0.1], [0.04×0.1, 0.04]]；再加 Q = [[0.000025, 0.0005], [0.0005, 0.01]]
+    kf = KalmanCV(10.0, -2.0)
+    kf.P = np.diag([0.01, 0.04])
+    kf.predict(0.1)
+    assert np.allclose(kf.P, [[0.010425, 0.0045], [0.0045, 0.05]])
+
+
+def test_update_when_measurement_equals_guess():
+    # 量的正好等于猜的：估计不动，但更有把握了（P[0, 0] 变小）
+    kf = KalmanCV(10.0, -2.0)
+    kf.P = np.array([[0.04, 0.02], [0.02, 0.1]])
+    kf.update(10.0)
+    assert np.allclose(kf.x, [10.0, -2.0])
+    assert kf.P[0, 0] < 0.04
+
+
+def test_update_hand_numbers():
+    # y = 11 - 10 = 1；S = 0.04 + 0.04 = 0.08；K = [0.04, 0.02] / 0.08 = [0.5, 0.25]
+    # x = [10 + 0.5, -2 + 0.25]；P = P - outer(K, P[0]) = [[0.02, 0.01], [0.01, 0.095]]
+    kf = KalmanCV(10.0, -2.0, r=0.04)
+    kf.P = np.array([[0.04, 0.02], [0.02, 0.1]])
+    kf.update(11.0)
+    assert np.allclose(kf.x, [10.5, -1.75])
+    assert np.allclose(kf.P, [[0.02, 0.01], [0.01, 0.095]])
+
+
+def test_tracks_closing_speed():
+    # 第 1 步那组数据（真实接近速度 -2，测距噪声 0.2 米）：1 秒以后卡尔曼的速度误差都在 0.5 m/s 以内
+    t = np.arange(0.0, 5.0 + 1e-9, 0.1)
+    z = 20.0 - 2.0 * t + np.random.default_rng(0).normal(0.0, 0.2, len(t))
+    kf = KalmanCV(z[0])
+    speeds = [kf.x[1]]
+    for k in range(1, len(t)):
+        kf.predict(0.1)
+        kf.update(z[k])
+        speeds.append(kf.x[1])
+    err = np.abs(np.array(speeds[10:]) + 2.0)
+    assert err.max() < 0.5

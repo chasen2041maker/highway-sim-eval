@@ -22,3 +22,41 @@ def diff_speed(dist_m: np.ndarray, dt_s: float) -> np.ndarray:
         v = (dist_m[k + 1] - dist_m[k]) / dt_s
         speeds.append(v)
     return np.array(speeds)
+
+
+class KalmanCV:
+    """匀速卡尔曼滤波（一维，沿车道方向）：跟踪前车的距离 d 和速度 v（A6 第 2 步）。
+
+    每 0.1 秒一圈：predict(dt) 猜一步 → 雷达这一帧量到了，就 update(z) 合一下；量不到就只猜。
+
+    self.x：形状 (2,)，[d, v]：前车离我多少米、前车相对我的速度（m/s，负数 = 在靠近）。
+    self.P：形状 (2, 2)，有多没把握。P[0, 0] = 距离的方差（动画里 ± 那个数的平方），P[1, 1] = 速度的方差。
+    q：前车加减速有多猛（越大，每猜一步越没把握）。
+    r：雷达量距离的方差：误差 0.2 米 → r = 0.2² = 0.04。
+    """
+
+    def __init__(self, d0: float, v0: float = 0.0, p0_d: float = 1.0, p0_v: float = 25.0,
+                 q: float = 1.0, r: float = 0.04):
+        self.x = np.array([d0, v0], dtype=float)
+        self.P = np.diag([p0_d, p0_v]).astype(float)
+        self.q = q
+        self.r = r
+
+    def predict(self, dt: float) -> None:
+        """猜：按现在的速度把前车往前推 dt 秒，速度先当它不变；猜完没把握变大。"""
+        F = np.array([[1.0, dt],
+                      [0.0, 1.0]])                       # F @ x = [d + v·dt, v]
+        Q = self.q * np.array([[dt ** 4 / 4, dt ** 3 / 2],
+                               [dt ** 3 / 2, dt ** 2]])  # 这 dt 秒里前车可能加减速，多出来的没把握（给定）
+        self.x = F @ self.x
+        self.P = F @ self.P @ F.T + Q
+
+
+    def update(self, z: float) -> None:
+        """合：用这一帧雷达量到的距离 z，修正 self.x 和 self.P。"""
+        y = z - self.x[0]
+        S = self.P[0, 0] + self.r
+        K = self.P[:, 0] / S
+        self.x = self.x + K * y
+        self.P = self.P - np.outer(K, self.P[0, :])
+
