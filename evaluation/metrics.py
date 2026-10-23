@@ -3,6 +3,8 @@
 import math
 import numpy as np
 
+from ads.tracking import match_tracks  # A6 第 4 步：跟踪评测的配对规则和跟踪时一样
+
 def point_to_segment_m(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
     """车 P 到线段 AB 的最短距离（米）：垂足在线段上就垂直量，落在外面就量到近的那颗钉子。"""
     dx, dy  = bx - ax, by - ay    # 路的方向：A → B
@@ -62,3 +64,45 @@ def detection_metrics(pred_xy, true_xy, max_dist_m: float) -> dict:
     else:
         mean_error_m = float("nan")
     return {"matches": matches, "recall": recall, "precision": precision, "mean_error_m": mean_error_m}
+
+
+def tracking_metrics(truth: list[dict], tracks: list[dict], gate_m: float = 2.0) -> dict:
+    """跟踪评测（A6 第 4 步）：每一帧把跟踪器的纸条和真车一对一配上，再数错了多少。
+
+    在系统里：跟踪器（ads/tracking.py）是被考的“学生”，这个函数是“考官”：手里有真值，
+    每帧对一次答案，最后报几个数，用来比较两个跟踪器（例如 MAX_MISSES 10 vs 3）谁好。
+
+    truth：长度 N 的列表（N 帧），第 k 帧是字典 {车名: (x, y, vx, vy)}：真车的位置（米）和速度（m/s）。
+    tracks：长度 N 的列表，第 k 帧是字典 {编号: (x, y, vx, vy)}：跟踪器这一帧手里的纸条，估计的位置和速度。
+            某一帧一张纸条都没有时是 {}。
+    gate_m：真车和纸条离得超过这么多米，就不算配上。
+    配对规则和跟踪时一样：一对一、总距离最小、超过门槛的扔掉，直接借用 ads.tracking.match_tracks。
+
+    返回 dict，5 个键：
+        "pos_err_m"：所有配上的对，位置误差（两点距离）的平均值；一对都没有时 float("nan")；
+        "speed_err_mps"：所有配上的对，速度误差的平均值（速度向量之差的长度，np.hypot(dvx, dvy)）；一对都没有时 nan；
+        "id_switches"：编号跳变次数：一辆真车这一帧配上的编号，和它【上一次配上】的编号不一样，记 1 次
+                      （中间几帧没配上不算跳变；第一次配上也不算）；
+        "missed"：漏：每帧没配上纸条的真车个数，加起来；
+        "false_tracks"：多：每帧没配上真车的纸条张数，加起来（比如护栏误检留下的鬼影）。
+    """
+    pos_errs, speed_errs = [], []          # 每个配上的对的误差，最后取平均
+    last_id = {}             # 每辆真车上一次配上的编号：{车名: 编号}
+    switches = missed = false_tracks = 0
+    for k in range(len(truth)):
+        names = list(truth[k])
+        ids = list(tracks[k])
+        g = np.array([truth[k][n][:2] for n in names])      # 真车位置，G 行 2 列
+        h = np.array([tracks[k][i][:2] for i in ids])       # 纸条位置，H 行 2 列
+        pairs = match_tracks(g, h, gate_m)        # (a, b)：第 a 辆真车配第 b 张纸条
+
+        for a,b in pairs:
+            gx, gy, gvx, gvy = truth[k][names[a]]
+            hx, hy, hvx, hvy = tracks[k][ids[b]]
+            pos_errs.append(np.hypot(hx - gx, hy- gy))     # 位置差多远
+            speed_errs.append(np.hypot(gvx - hvx, gvy - hvy))
+
+            name, tid = names[a], ids[b]                         # 这辆真车叫什么、这一帧配上的编号
+            if name in last_id and last_id[name] != tid:       # 以前配上过，而且编号变了
+                switches += 1
+            last_id[name] = tid                                # 记下这一次配上的编号
