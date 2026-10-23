@@ -1,6 +1,6 @@
 import numpy as np
 
-from ads.tracking import diff_speed
+from ads.tracking import diff_speed, match_tracks
 
 
 def test_diff_speed_constant_closing():
@@ -68,3 +68,36 @@ def test_tracks_closing_speed():
         speeds.append(kf.x[1])
     err = np.abs(np.array(speeds[10:]) + 2.0)
     assert err.max() < 0.5
+
+
+# ---------- A6 第 3 步：配对 match_tracks ----------
+
+def test_match_shuffled_boxes():
+    # 两条轨迹猜在 0 米、10 米；框的顺序反过来给：框 0 在 10.2，框 1 在 0.1
+    pairs = match_tracks(np.array([[0.0, 0.0], [10.0, 0.0]]), np.array([[10.2, 0.0], [0.1, 0.0]]))
+    assert sorted(pairs) == [(0, 1), (1, 0)]
+
+
+def test_match_gate_drops_far_pair():
+    # 第 2 条轨迹离唯一剩下的框 3 米，超过门槛 2 米，不算配上
+    pairs = match_tracks(np.array([[0.0, 0.0], [10.0, 0.0]]), np.array([[0.3, 0.0], [13.0, 0.0]]), gate_m=2.0)
+    assert sorted(pairs) == [(0, 0)]
+
+
+def test_match_empty():
+    assert match_tracks(np.zeros((0, 2)), np.array([[1.0, 1.0]])) == []
+    assert match_tracks(np.array([[1.0, 1.0]]), np.zeros((0, 2))) == []
+
+
+def test_match_total_distance_not_greedy():
+    # 圈 A (0, 0)、圈 B (2.2, 0)；框 p (1, 0)、框 q (-1.1, 0)
+    # 贪心先拿最近的 A-p (1.0)，B 只剩 q (3.3)，合计 4.3；总距离最小是 A-q (1.1) + B-p (1.2) = 2.3
+    pairs = match_tracks(np.array([[0.0, 0.0], [2.2, 0.0]]), np.array([[1.0, 0.0], [-1.1, 0.0]]), gate_m=5.0)
+    assert sorted(pairs) == [(0, 1), (1, 0)]
+
+
+def test_match_frame_19_from_the_explainer():
+    # 动画 ① 那一帧（1.9 秒）：1 号↔框 2、2 号↔框 1、3 号↔框 0
+    pred = np.array([[16.096, -0.033], [13.715, 3.552], [24.468, -3.425]])
+    det = np.array([[24.222, -3.439], [14.032, 3.551], [15.946, 0.116]])
+    assert sorted(match_tracks(pred, det)) == [(0, 2), (1, 1), (2, 0)]

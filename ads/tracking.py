@@ -7,6 +7,7 @@ A4 里 IDM 用的前车车速是向 CARLA 要的真值；真车上没人告诉�
 from __future__ import annotations
 
 import numpy as np
+from scipy.optimize import linear_sum_assignment  # 匈牙利算法（A6 第 3 步配对用）
 
 
 def diff_speed(dist_m: np.ndarray, dt_s: float) -> np.ndarray:
@@ -60,3 +61,33 @@ class KalmanCV:
         self.x = self.x + K * y
         self.P = self.P - np.outer(K, self.P[0, :])
 
+
+def match_tracks(pred_xy: np.ndarray, det_xy: np.ndarray, gate_m: float = 2.0) -> list[tuple[int, int]]:
+    """配对（A6 第 3 步）：这一帧雷达的框，各归哪条轨迹。
+
+    在系统里：跟踪器每帧先让每条轨迹 predict（猜），再用这个函数把框分给轨迹；
+    配上的框交给那条轨迹的卡尔曼 update，配不上的交给编号管理（新车 / 只猜）。
+
+    pred_xy：形状 (T, 2)，T 行 2 列：每条轨迹猜的位置 (x, y)，第 i 行 = 第 i 条轨迹。
+    det_xy：形状 (D, 2)，D 行 2 列：雷达这一帧的框中心 (x, y)，顺序是乱的。
+    gate_m：门槛（米），距离超过它的不算配上。
+    返回：列表 [(i, j), ...]，第 i 条轨迹配第 j 个框（i、j 都是从 0 数的下标）。
+          规则：一对一；在所有一对一的配法里挑总距离最小的（匈牙利算法：scipy 的 linear_sum_assignment）；
+          挑出来以后，距离超过 gate_m 的那对扔掉。没有轨迹或没有框时返回 []。
+    """
+    if len(pred_xy) == 0 or len(det_xy) == 0:
+        return []
+    T = len(pred_xy)
+    D = len(det_xy)
+    dist = np.zeros((T, D))
+    for i in range(T):
+        for j in range(D):
+            dx = pred_xy[i][0] - det_xy[j][0]
+            dy = pred_xy[i][1] - det_xy[j][1]
+            dist[i, j] = np.hypot(dx,dy)
+    rows, cols = linear_sum_assignment(dist)
+    pairs = []
+    for i, j in zip(rows, cols):
+        if dist[i, j] <= gate_m:
+            pairs.append((int(i), int(j)))
+    return pairs
