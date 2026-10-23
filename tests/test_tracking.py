@@ -101,3 +101,88 @@ def test_match_frame_19_from_the_explainer():
     pred = np.array([[16.096, -0.033], [13.715, 3.552], [24.468, -3.425]])
     det = np.array([[24.222, -3.439], [14.032, 3.551], [15.946, 0.116]])
     assert sorted(match_tracks(pred, det)) == [(0, 2), (1, 1), (2, 0)]
+
+
+# ---------- A6 第 3 步：编号管理 Track / MultiTracker ----------
+
+from ads.tracking import MultiTracker, Track  # noqa: E402
+from sim.fake_traffic import make_scene  # noqa: E402
+
+
+def test_track_starts_at_box():
+    t = Track(7, (20.0, 3.5))
+    assert t.id == 7 and t.misses == 0
+    assert np.allclose(t.xy, [20.0, 3.5])
+
+
+def test_track_predict_moves_both_axes():
+    # 速度先手动设好：x 方向每秒近 2 米、y 方向每秒往左 1 米 → 0.1 秒后在 (19.8, 0.1)
+    t = Track(1, (20.0, 0.0))
+    t.kx.x[1] = -2.0
+    t.ky.x[1] = 1.0
+    t.predict(0.1)
+    assert np.allclose(t.xy, [19.8, 0.1])
+
+
+def test_track_update_pulls_toward_box_and_clears_misses():
+    t = Track(1, (20.0, 0.0))
+    t.misses = 3
+    t.update((20.4, -0.4))
+    assert t.misses == 0
+    assert 20.0 < t.xy[0] < 20.4 and -0.4 < t.xy[1] < 0.0   # 往框那边挪了，但不会一步到位
+
+
+def test_first_frame_every_box_gets_a_new_id():
+    mt = MultiTracker()
+    tracks = mt.step(np.array([[20.0, 0.0], [12.0, 3.5]]))
+    assert [t.id for t in tracks] == [1, 2]
+    assert np.allclose(tracks[0].xy, [20.0, 0.0])            # 1 号 = 第 0 个框
+
+
+def test_shuffled_boxes_keep_their_ids():
+    mt = MultiTracker()
+    mt.step(np.array([[20.0, 0.0], [12.0, 3.5]]))
+    tracks = mt.step(np.array([[12.1, 3.5], [19.8, 0.0]]))    # 第二帧框的顺序反过来
+    where = {t.id: t.xy for t in tracks}
+    assert sorted(where) == [1, 2]
+    assert where[1][0] > 19.0 and where[2][0] < 13.0          # 1 号还是 20 米那辆，2 号还是 12 米那辆
+
+
+def test_hidden_car_kept_then_dropped():
+    mt = MultiTracker(max_misses=3)
+    mt.step(np.array([[20.0, 0.0]]))
+    nothing = np.zeros((0, 2))
+    for _ in range(3):
+        mt.step(nothing)
+    assert [t.id for t in mt.tracks] == [1] and mt.tracks[0].misses == 3   # 连着 3 帧没看到：还留着，只猜
+    mt.step(nothing)
+    assert mt.tracks == []                                                   # 第 4 帧：超过 3，扔掉
+
+
+def test_far_box_gets_new_id_and_old_track_misses():
+    mt = MultiTracker()
+    mt.step(np.array([[20.0, 0.0]]))
+    tracks = mt.step(np.array([[8.0, -6.0]]))      # 护栏误检：离 1 号 13 米多，超过 2 米门槛
+    assert [t.id for t in tracks] == [1, 2]
+    assert tracks[0].misses == 1 and tracks[1].misses == 0
+
+
+def test_ids_are_never_reused():
+    mt = MultiTracker(max_misses=0)
+    mt.step(np.array([[20.0, 0.0]]))
+    mt.step(np.zeros((0, 2)))                       # 1 号没配上，超过 0 帧，扔掉
+    tracks = mt.step(np.array([[20.0, 0.0]]))
+    assert [t.id for t in tracks] == [2]            # 1 号不回收
+
+
+def test_whole_scene_matches_the_explainer():
+    # 动画 ②、③：留 10 帧 → 三辆车 1、2、3 号到底，护栏鬼影 4 号 4.6 秒扔掉；
+    #            留 3 帧 → 右车道 3 号 2.3 秒被扔、2.5 秒回来变 4 号，护栏鬼影 5 号
+    for max_misses, ever, end in [(10, [1, 2, 3, 4], [1, 2, 3]), (3, [1, 2, 3, 4, 5], [1, 2, 4])]:
+        scene = make_scene()
+        mt = MultiTracker(max_misses=max_misses)
+        seen = set()
+        for det in scene.detections:
+            seen.update(t.id for t in mt.step(det))
+        assert sorted(seen) == ever
+        assert sorted(t.id for t in mt.tracks) == end

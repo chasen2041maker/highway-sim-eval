@@ -91,3 +91,97 @@ def match_tracks(pred_xy: np.ndarray, det_xy: np.ndarray, gate_m: float = 2.0) -
         if dist[i, j] <= gate_m:
             pairs.append((int(i), int(j)))
     return pairs
+
+class Track:
+    """一张纸条：一辆车的编号 + 它的位置和速度 + 连着几帧没配上（A6 第 3 步）。
+
+    在系统里：MultiTracker 每帧先让每张纸条 predict（猜），配上框的纸条 update（用框改准），
+    配不上的 misses 加 1，太久没配上就扔掉。
+
+    位置和速度用第 2 步的 KalmanCV：x 方向（往前）一个、y 方向（往左）一个，各管各的
+    （KalmanCV 是一维的：它的 x[0] 是位置、x[1] 是速度）。
+
+    track_id：编号（1、2、3……，发出去就不再变）。
+    xy：第一次看到它的那个框的中心 (x, y)，米。
+    建好以后有 4 个属性：
+        self.id：编号；
+        self.kx、self.ky：x、y 方向各一个 KalmanCV，初始位置 = 框的 x、y（初始速度用默认的 0）；
+        self.misses：连着几帧没配上框，一开始是 0。
+    """
+
+    def __init__(self, track_id: int, xy) -> None:
+        self.id = track_id
+        self.kx = KalmanCV(xy[0])
+        self.ky = KalmanCV(xy[1])
+        self.misses = 0
+
+    def predict(self, dt: float) -> None:
+        """猜：x、y 两个卡尔曼各往前推 dt 秒。"""
+        self.kx.predict(dt)
+        self.ky.predict(dt)
+
+    def update(self, xy) -> None:
+        """改准：x、y 两个卡尔曼各用框中心的 x、y 合一下；配上了，misses 清零。"""
+        self.kx.update(xy[0])
+        self.ky.update(xy[1])
+        self.misses = 0
+        
+
+    @property
+    def xy(self) -> np.ndarray:
+        """现在估计的位置 [x, y]：两个卡尔曼各自的位置 x[0]。用的时候写 t.xy，不加括号。"""
+        return np.array([self.kx.x[0], self.ky.x[0]])
+
+
+class MultiTracker:
+    """多车跟踪器：每帧 猜 → 配 → 管编号（A6 第 3 步）。
+
+    gate_m：配对门槛（米），原样交给 match_tracks。
+    max_misses：一张纸条连着没配上超过这么多帧就扔掉（10 帧 = 1 秒；动画 ② 比了 10 和 3）。
+    self.tracks：现在手里的纸条（Track 列表，按建的先后排）。
+    self.next_id：下一个要发的编号，从 1 开始，只增不减（扔掉的编号不回收）。
+    """
+
+    def __init__(self, gate_m: float = 2.0, max_misses: int = 10) -> None:
+        self.gate_m = gate_m
+        self.max_misses = max_misses
+        self.tracks: list[Track] = []
+        self.next_id = 1
+
+    def step(self, det_xy: np.ndarray, dt: float = 0.1) -> list[Track]:
+        """处理一帧雷达框，返回处理完以后手里的纸条（就是 self.tracks）。
+
+        det_xy：形状 (D, 2)，这一帧的框中心，顺序乱（D 可以是 0）。
+        按顺序做 5 件事：
+          ① 猜：每张纸条 predict(dt)；
+          ② 配：把每张纸条猜的位置排成形状 (T, 2) 的表，和 det_xy 一起交给 match_tracks(..., self.gate_m)；
+          ③ 改准：配上的纸条，用配给它的那个框 update；
+          ④ 没配上的纸条：misses 加 1；misses 超过 max_misses 的扔掉；
+          ⑤ 没人认领的框：按框的下标从小到大，每个发一个新编号（self.next_id，发完加 1），建新纸条。
+        """
+        for t in self.tracks:
+            t.predict(dt)
+
+        pre = np.array([t.xy for t in self.tracks])
+        pairs = match_tracks(pre, det_xy, self.gate_m)
+
+        matched_t = set()
+        matched_d = set()
+        for i, j in pairs:
+            self.tracks[i].update(det_xy[j])
+            matched_t.add(i)
+            matched_d.add(j)
+
+        keep = []
+        for i, t in enumerate(self.tracks):
+            if i not in matched_t:
+                t.misses += 1
+            if t.misses <= self.max_misses:
+                keep.append(t)
+        self.tracks = keep
+
+        for j in range(len(det_xy)):
+            if j not in matched_d:
+                self.tracks.append(Track(self.next_id, det_xy[j]))
+                self.next_id += 1
+        return self.tracks
