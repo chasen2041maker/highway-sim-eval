@@ -5,3 +5,4 @@ outputs/
 .idea/
 .vscode/
 .DS_Store
+cpp/build/
