@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>S 形变道慢放</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 布局：一块“路面”主画面（跟着车走的俯视图）+ 右侧仪表（方向盘、横向加速度表）+ 下方三条曲线，同一个时间游标；下面两张小表收尾 */
+:root {
+  --bg: #eef2f1;
+  --surface: #ffffff;
+  --ink: #17211e;
+  --muted: #5b6a65;
+  --line: #d3dcd8;
+  --asphalt: #3b4347;
+  --asphalt-edge: #2e3538;
+  --paint: #f4f6f5;
+  --s-path: #0f8f86;
+  --diag-path: #d2493f;
+  --car: #f0a531;
+  --car-ink: #3b2a08;
+  --comfort: rgba(15, 143, 134, 0.16);
+  --grid: rgba(23, 33, 30, 0.08);
+  --font-display: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111617; --surface: #192022; --ink: #e3ebe8; --muted: #93a39e; --line: #2b3538;
+    --asphalt: #2c3336; --asphalt-edge: #22282a; --paint: #dfe5e3;
+    --s-path: #3cc7bb; --diag-path: #ff7a6e; --car: #f3b24a; --car-ink: #2a1d04;
+    --comfort: rgba(60, 199, 187, 0.16); --grid: rgba(227, 235, 232, 0.08);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111617; --surface: #192022; --ink: #e3ebe8; --muted: #93a39e; --line: #2b3538;
+  --asphalt: #2c3336; --asphalt-edge: #22282a; --paint: #dfe5e3;
+  --s-path: #3cc7bb; --diag-path: #ff7a6e; --car: #f3b24a; --car-ink: #2a1d04;
+  --comfort: rgba(60, 199, 187, 0.16); --grid: rgba(227, 235, 232, 0.08);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-size: clamp(24px, 4vw, 34px); margin: 0 0 4px; text-wrap: balance; letter-spacing: 0.02em; }
+header p { margin: 0; color: var(--muted); max-width: 62ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; font-family: var(--font-data); }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--ink); padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg button:focus-visible, .play:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--s-path); outline-offset: 2px; }
+.play { font: inherit; font-weight: 600; border: 0; border-radius: 8px; background: var(--s-path); color: #fff; padding: 6px 14px; cursor: pointer; min-width: 84px; }
+.ctl-label { font-size: 12px; color: var(--muted); margin-right: 6px; }
+.scrub { flex: 1 1 220px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.scrub input { flex: 1; min-width: 0; accent-color: var(--s-path); }
+.tread { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 12px; }
+@media (max-width: 760px) { .main { grid-template-columns: 1fr; } }
+.road-box { position: relative; min-width: 0; }
+canvas { display: block; width: 100%; }
+#road { aspect-ratio: 8 / 3; border-radius: 6px; background: var(--asphalt); max-width: 100%; }
+.caption { margin-top: 8px; font-weight: 700; font-size: 17px; min-height: 1.6em; }
+.caption .tag { font-family: var(--font-data); font-weight: 600; font-size: 13px; color: var(--muted); margin-right: 8px; }
+.side { display: grid; gap: 10px; align-content: start; }
+@media (max-width: 760px) { .side { grid-template-columns: 1fr 1fr; } }
+.meter { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 4px; }
+.meter h3 { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; }
+.meter .val { font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; }
+.meter .note { font-size: 11px; color: var(--muted); line-height: 1.4; }
+#wheel { aspect-ratio: 1; max-width: 120px; margin: 0 auto; }
+#gauge { aspect-ratio: 4 / 1; }
+#charts { aspect-ratio: 16 / 7; max-width: 100%; }
+@media (max-width: 560px) { #charts { aspect-ratio: 4 / 3; } }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+section h2 { font-family: var(--font-display); font-size: 21px; margin: 0 0 6px; text-wrap: balance; }
+section > p { margin: 0 0 10px; max-width: 66ch; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 500px; font-size: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; }
+td.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.now td { background: var(--comfort); }
+tr:last-child td { border-bottom: 0; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+.two > section { min-width: 0; }
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.ok { color: var(--s-path); } .bad { color: var(--diag-path); }
+footer { font-size: 12px; color: var(--muted); }
+code { font-family: var(--font-data); font-size: 0.92em; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">highway-sim-eval · A7 第 2 步 · lane_change_d</div>
+    <h1>S 形变道慢放</h1>
+    <p>车速 10 m/s（36 km/h），从本车道变到左车道，横着挪 3.5 米。俯视图跟着车走，比例是真实的。右边是司机手上的方向盘和车里的人感受到的横向加速度。下面三条曲线和画面同步。</p>
+  </header>
+
+  <div class="stage">
+    <div class="controls">
+      <button class="play" id="play" type="button">暂停</button>
+      <div><span class="ctl-label">怎么变</span><span class="seg" id="mode">
+        <button type="button" data-v="s" aria-pressed="true">S 形（五次多项式）</button><button type="button" data-v="diag" aria-pressed="false">斜线</button>
+      </span></div>
+      <div><span class="ctl-label">用时</span><span class="seg" id="dur">
+        <button type="button" data-v="2" aria-pressed="false">2 秒</button><button type="button" data-v="4" aria-pressed="true">4 秒</button><button type="button" data-v="6" aria-pressed="false">6 秒</button>
+      </span></div>
+      <div><span class="ctl-label">慢放</span><span class="seg" id="rate">
+        <button type="button" data-v="0.25" aria-pressed="false">¼×</button><button type="button" data-v="0.5" aria-pressed="true">½×</button><button type="button" data-v="1" aria-pressed="false">1×</button>
+      </span></div>
+      <div class="scrub"><input id="scrub" type="range" min="0" max="1000" value="0" aria-label="拖动时间"><span class="tread" id="tread">t = 0.00 s</span></div>
+    </div>
+
+    <div class="main">
+      <div class="road-box">
+        <canvas id="road" width="960" height="360" aria-label="俯视图：车从本车道变到左车道"></canvas>
+        <div class="caption" id="caption"><span class="tag"></span></div>
+      </div>
+      <div class="side">
+        <div class="meter">
+          <h3>司机的方向盘</h3>
+          <canvas id="wheel" width="240" height="240" aria-label="方向盘"></canvas>
+          <div class="val" id="wheelVal">0°</div>
+          <div class="note">左正右负；按方向盘转 15 圈、车轮转 1 圈算</div>
+        </div>
+        <div class="meter">
+          <h3>横向加速度（坐车的人被往旁边推）</h3>
+          <canvas id="gauge" width="400" height="100" aria-label="横向加速度表"></canvas>
+          <div class="val" id="accVal">0.00 m/s²</div>
+          <div class="note">浅色区 = ±2 m/s²，常用的“坐着舒服”经验值</div>
+        </div>
+      </div>
+    </div>
+
+    <canvas id="charts" width="1000" height="440" aria-label="d、横向速度、横向加速度随时间的曲线"></canvas>
+    <div class="legend">
+      <span><i style="background: var(--s-path)"></i>S 形（五次多项式）</span>
+      <span><i style="background: var(--diag-path)"></i>斜线（两头最快 0.15 秒打满方向）</span>
+      <span>竖线 = 现在；淡的那条 = 另一种变法，方便对比</span>
+    </div>
+  </div>
+
+  <div class="two">
+    <section>
+      <h2>司机的手：左打、回正、右打、回正</h2>
+      <p>S 形变道里，方向盘一共动了四下。表里高亮的是画面现在所在的阶段（用时 4 秒时的数字）。</p>
+      <div class="table-wrap"><table id="phases">
+        <thead><tr><th>时刻</th><th>偏了多少</th><th>横向速度</th><th>横向加速度</th><th>司机的手</th></tr></thead>
+        <tbody>
+          <tr data-k="0"><td class="num">0 s</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td>方向盘正着</td></tr>
+          <tr data-k="1"><td class="num">0.85 s</td><td class="num">0.23 m</td><td class="num">0.73</td><td class="num">+1.26 最大</td><td>往左打得最多</td></tr>
+          <tr data-k="2"><td class="num">2 s</td><td class="num">1.75 m</td><td class="num">1.64 最快</td><td class="num">0</td><td>方向回正，车身斜着往左滑</td></tr>
+          <tr data-k="3"><td class="num">3.15 s</td><td class="num">3.27 m</td><td class="num">0.73</td><td class="num">−1.26</td><td>往右打得最多，把车头拉回来</td></tr>
+          <tr data-k="4"><td class="num">4 s</td><td class="num">3.5 m</td><td class="num">0</td><td class="num">0</td><td>方向回正，停在左车道正中间</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>用时减半，横向加速度变 4 倍</h2>
+      <p>同样挪 3.5 米：时间减半，横向速度要快 2 倍，而且只有一半的时间去提速，又是 2 倍。公式里横向加速度 ∝ Δ / T²。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>用时</th><th>最大横向速度</th><th>最大横向加速度</th><th>最大 jerk</th><th>坐着</th></tr></thead>
+        <tbody>
+          <tr><td class="num">2 s</td><td class="num">3.28 m/s</td><td class="num">5.05 m/s²</td><td class="num">26.3 m/s³</td><td><span class="pill bad">像紧急躲避</span></td></tr>
+          <tr><td class="num">4 s</td><td class="num">1.64 m/s</td><td class="num">1.26 m/s²</td><td class="num">3.3 m/s³</td><td><span class="pill ok">舒服</span></td></tr>
+          <tr><td class="num">6 s</td><td class="num">1.09 m/s</td><td class="num">0.56 m/s²</td><td class="num">1.0 m/s³</td><td><span class="pill ok">很稳，但慢</span></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+  </div>
+
+  <footer>S 形曲线的公式和 <code>ads/planning.py</code> 里的 <code>lane_change_d</code> 一样：d = Δ·(10τ³ − 15τ⁴ + 6τ⁵)，τ = t / T。斜线版本假设司机最快 0.15 秒把方向打满（真车做不到一瞬间）。方向盘角按自行车模型算：轴距 2.8 米，车轮转角 = atan(轴距 × 横向加速度 / 车速²)，方向盘传动比 15。</footer>
+</div>
+
+<script>
+(() => {
+  const V = 10;          // 车速 m/s
+  const LANE = 3.5;      // 车道宽 / 要挪的距离
+  const WB = 2.8;        // 轴距
+  const RATIO = 15;      // 方向盘传动比
+  const EPS = 0.15;      // 斜线：多快把方向打满（秒）
+  const PRE = 1.0, POST = 1.2;   // 变道前后各多看一会儿
+
+  const state = { mode: "s", T: 4, rate: 0.5, t: 0.85, playing: true };
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) state.playing = false;
+
+  // 和 ads/planning.py 的 lane_change_d 同一个公式
+  function sCurve(t, T) {
+    const tau = Math.min(Math.max(t / T, 0), 1);
+    const d = LANE * (10 * tau ** 3 - 15 * tau ** 4 + 6 * tau ** 5);
+    if (t < 0 || t > T) return [d, 0, 0, 0];
+    return [d,
+      LANE * (30 * tau ** 2 - 60 * tau ** 3 + 30 * tau ** 4) / T,
+      LANE * (60 * tau - 180 * tau ** 2 + 120 * tau ** 3) / T ** 2,
+      LANE * (60 - 360 * tau + 360 * tau ** 2) / T ** 3];
+  }
+  // 斜线：中间匀速斜着走；两头各用 EPS 秒把横向速度从 0 拉满 / 降到 0
+  function diag(t, T) {
+    const Vl = LANE / (T - EPS), a = Vl / EPS;
+    if (t <= 0) return [0, 0, 0, 0];
+    if (t >= T) return [LANE, 0, 0, 0];
+    if (t < EPS) return [0.5 * a * t * t, a * t, a, 0];
+    if (t > T - EPS) { const r = T - t; return [LANE - 0.5 * a * r * r, a * r, -a, 0]; }
+    return [0.5 * a * EPS * EPS + Vl * (t - EPS), Vl, 0, 0];
+  }
+  const f = (mode, t) => (mode === "s" ? sCurve : diag)(t, state.T);
+  const wheelDeg = (aLat) => RATIO * Math.atan(WB * aLat / (V * V)) * 180 / Math.PI;
+
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // ---------- 画布：按设备像素比放大，免得发虚 ----------
+  function fit(cv) {
+    const r = cv.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return [ctx, r.width, r.height];
+  }
+
+  const road = document.getElementById("road");
+  const wheel = document.getElementById("wheel");
+  const gauge = document.getElementById("gauge");
+  const charts = document.getElementById("charts");
+
+  // ---------- 俯视图：x 往右是前进方向，往上是左 ----------
+  function drawRoad() {
+    const [ctx, W, H] = fit(road);
+    const span = 26;                       // 画面宽 26 米
+    const k = W / span;                    // 每米多少像素
+    const carX = V * state.t;
+    const x0 = carX - span * 0.38;          // 车放在画面偏左，前面多看一点
+    const yMid = LANE / 2;                 // 两条车道的中间放在画面正中
+    const X = (x) => (x - x0) * k;
+    const Y = (y) => H / 2 - (y - yMid) * k;
+
+    ctx.fillStyle = css("--asphalt"); ctx.fillRect(0, 0, W, H);
+    // 路肩
+    ctx.fillStyle = css("--asphalt-edge");
+    ctx.fillRect(0, 0, W, Y(LANE * 1.5)); ctx.fillRect(0, Y(-LANE / 2), W, H - Y(-LANE / 2));
+    // 车道线
+    ctx.strokeStyle = css("--paint"); ctx.lineWidth = Math.max(1.5, 0.15 * k);
+    [-LANE / 2, LANE * 1.5].forEach((y) => { ctx.beginPath(); ctx.moveTo(0, Y(y)); ctx.lineTo(W, Y(y)); ctx.stroke(); });
+    ctx.setLineDash([3 * k, 6 * k]); ctx.lineDashOffset = (x0 * k) % (9 * k);
+    ctx.beginPath(); ctx.moveTo(0, Y(LANE / 2)); ctx.lineTo(W, Y(LANE / 2)); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+    // 车道名
+    ctx.fillStyle = css("--paint"); ctx.globalAlpha = 0.55;
+    ctx.font = `${Math.max(11, 0.55 * k)}px ${css("--font-body")}`;
+    ctx.fillText("左车道（目标）", 8, Y(LANE) - 0.9 * k);
+    ctx.fillText("本车道", 8, Y(0) + 1.3 * k);
+    ctx.globalAlpha = 1;
+
+    // 两种路线：现在这种实线，另一种淡虚线
+    const other = state.mode === "s" ? "diag" : "s";
+    const pathOf = (mode, color, alpha, dash) => {
+      ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = Math.max(2, 0.12 * k);
+      if (dash) ctx.setLineDash([0.6 * k, 0.6 * k]);
+      ctx.beginPath();
+      for (let px = 0; px <= W; px += 2) {
+        const x = x0 + px / k, t = x / V;
+        const y = f(mode, t)[0];
+        px === 0 ? ctx.moveTo(px, Y(y)) : ctx.lineTo(px, Y(y));
+      }
+      ctx.stroke(); ctx.restore();
+    };
+    pathOf(other, css(other === "s" ? "--s-path" : "--diag-path"), 0.35, true);
+    pathOf(state.mode, css(state.mode === "s" ? "--s-path" : "--diag-path"), 0.95, false);
+
+    // 车：车身中心在路线上，车头朝向 = atan(横向速度 / 车速)
+    const [d, vy] = f(state.mode, state.t);
+    const heading = Math.atan2(vy, V);
+    const cx = X(carX), cy = Y(d);
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(-heading);
+    const Lc = 4.6 * k, Wc = 1.9 * k;
+    ctx.fillStyle = css("--car"); ctx.strokeStyle = css("--car-ink"); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(-Lc / 2, -Wc / 2, Lc, Wc, 0.35 * k); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = css("--car-ink"); ctx.globalAlpha = 0.55;
+    ctx.fillRect(0.55 * k, -Wc / 2 + 0.25 * k, 0.9 * k, Wc - 0.5 * k);    // 前挡风玻璃
+    ctx.globalAlpha = 1;
+    // 前轮：跟着方向盘转（车轮角 = 方向盘角 / 15，画面里按真实角度）
+    const steer = Math.atan(WB * f(state.mode, state.t)[2] / (V * V));
+    ctx.fillStyle = css("--car-ink");
+    [[1.45, -Wc / 2 / k], [1.45, Wc / 2 / k]].forEach(([fx, fy]) => {
+      ctx.save(); ctx.translate(fx * k, fy * k); ctx.rotate(-steer);
+      ctx.fillRect(-0.35 * k, -0.12 * k, 0.7 * k, 0.24 * k); ctx.restore();
+    });
+    ctx.restore();
+
+    // 车头角度
+    ctx.fillStyle = css("--paint");
+    ctx.font = `${Math.max(11, 0.5 * k)}px ${css("--font-data")}`;
+    ctx.fillText(`车头偏 ${(heading * 180 / Math.PI).toFixed(1)}°   离本车道中心 ${d.toFixed(2)} m`, 8, H - 8);
+  }
+
+  // ---------- 方向盘 ----------
+  function drawWheel(deg) {
+    const [ctx, W, H] = fit(wheel);
+    const r = Math.min(W, H) / 2 - 6;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(-deg * Math.PI / 180);
+    ctx.lineWidth = r * 0.16; ctx.strokeStyle = css("--ink");
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.88, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = r * 0.12;
+    [[-0.85, 0.15], [0.85, 0.15], [0, 0.85]].forEach(([x, y]) => { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(x * r, y * r); ctx.stroke(); });
+    ctx.fillStyle = css("--ink"); ctx.beginPath(); ctx.arc(0, 0, r * 0.22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = css("--car"); ctx.fillRect(-r * 0.06, -r * 1.0, r * 0.12, r * 0.24);   // 12 点钟标记
+    ctx.restore();
+  }
+
+  // ---------- 横向加速度表 ----------
+  function drawGauge(a) {
+    const [ctx, W, H] = fit(gauge);
+    const lim = 7, pad = 10;
+    const X = (v) => pad + (v + lim) / (2 * lim) * (W - 2 * pad);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = css("--grid"); ctx.fillRect(pad, H * 0.3, W - 2 * pad, H * 0.4);
+    ctx.fillStyle = css("--comfort"); ctx.fillRect(X(-2), H * 0.3, X(2) - X(-2), H * 0.4);
+    ctx.fillStyle = css("--muted"); ctx.font = `11px ${css("--font-data")}`; ctx.textAlign = "center";
+    [-6, -2, 2, 6].forEach((v) => ctx.fillText(v, X(v), H - 2));
+    const c = Math.max(-lim, Math.min(lim, a));
+    ctx.fillStyle = Math.abs(a) > 2 ? css("--diag-path") : css("--s-path");
+    ctx.fillRect(X(Math.min(0, c)), H * 0.3, Math.abs(X(c) - X(0)), H * 0.4);
+    ctx.fillStyle = css("--ink"); ctx.fillRect(X(c) - 1.5, H * 0.18, 3, H * 0.64);
+    ctx.textAlign = "left";
+  }
+
+  // ---------- 三条曲线 ----------
+  function drawCharts() {
+    const [ctx, W, H] = fit(charts);
+    ctx.clearRect(0, 0, W, H);
+    const T = state.T, t0 = -PRE, t1 = T + POST;
+    const left = 64, right = 12, top = 8, gap = 22;
+    const rowH = (H - top - gap * 2 - 22) / 3;
+    const X = (t) => left + (t - t0) / (t1 - t0) * (W - left - right);
+    const aMaxS = 10 * Math.sqrt(3) / 3 * LANE / T ** 2;
+    const aMaxD = LANE / (T - EPS) / EPS;
+    const vMax = Math.max(LANE * 1.875 / T, LANE / (T - EPS));
+    const aScale = (state.mode === "s" ? Math.max(aMaxS * 1.6, 2.4) : Math.min(aMaxD, 8) * 1.1);
+    const rows = [
+      { name: "偏了多少 d（m）", idx: 0, lo: -0.3, hi: LANE + 0.3, ticks: [0, LANE] },
+      { name: "横向速度（m/s）", idx: 1, lo: -0.2, hi: vMax * 1.15, ticks: [0, +(LANE * 1.875 / T).toFixed(2)] },
+      { name: "横向加速度（m/s²）", idx: 2, lo: -aScale, hi: aScale, ticks: state.mode === "s" ? [0, +aMaxS.toFixed(2), -(+aMaxS.toFixed(2))] : [0, +Math.min(aMaxD, 8).toFixed(1), -(+Math.min(aMaxD, 8).toFixed(1))] },
+    ];
+    ctx.font = `12px ${css("--font-body")}`;
+    rows.forEach((row, r) => {
+      const y0 = top + r * (rowH + gap);
+      const Y = (v) => y0 + rowH - (Math.max(row.lo, Math.min(row.hi, v)) - row.lo) / (row.hi - row.lo) * rowH;
+      // 底和刻度
+      ctx.fillStyle = css("--grid"); ctx.fillRect(left, y0, W - left - right, rowH);
+      if (row.idx === 2) { ctx.fillStyle = css("--comfort"); ctx.fillRect(left, Y(2), W - left - right, Y(-2) - Y(2)); }
+      ctx.strokeStyle = css("--line"); ctx.lineWidth = 1;
+      ctx.fillStyle = css("--muted"); ctx.textAlign = "right"; ctx.font = `11px ${css("--font-data")}`;
+      row.ticks.forEach((v) => { ctx.beginPath(); ctx.moveTo(left, Y(v)); ctx.lineTo(W - right, Y(v)); ctx.stroke(); ctx.fillText(v, left - 6, Y(v) + 4); });
+      ctx.textAlign = "left"; ctx.fillStyle = css("--ink"); ctx.font = `12px ${css("--font-body")}`;
+      ctx.fillText(row.name, left + 6, y0 + 14);
+      // 两条线：另一种淡一点
+      const draw = (mode, color, alpha, wdt) => {
+        ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = wdt; ctx.beginPath();
+        const n = 600;
+        for (let i = 0; i <= n; i++) {
+          const t = t0 + (t1 - t0) * i / n;
+          const v = f(mode, t)[row.idx];
+          i === 0 ? ctx.moveTo(X(t), Y(v)) : ctx.lineTo(X(t), Y(v));
+        }
+        ctx.stroke(); ctx.restore();
+      };
+      const other = state.mode === "s" ? "diag" : "s";
+      draw(other, css(other === "s" ? "--s-path" : "--diag-path"), 0.3, 1.5);
+      draw(state.mode, css(state.mode === "s" ? "--s-path" : "--diag-path"), 1, 2.5);
+      if (row.idx === 2 && aMaxD > aScale) {
+        ctx.fillStyle = css("--diag-path"); ctx.font = `11px ${css("--font-data")}`;
+        ctx.fillText(`斜线的尖峰 ±${aMaxD.toFixed(1)}，超出画面`, X(EPS) + 6, y0 + 28);
+      }
+      // 现在的点
+      const v = f(state.mode, state.t)[row.idx];
+      ctx.fillStyle = css(state.mode === "s" ? "--s-path" : "--diag-path");
+      ctx.beginPath(); ctx.arc(X(state.t), Y(v), 4, 0, Math.PI * 2); ctx.fill();
+    });
+    // 时间轴 + 竖线
+    const yb = top + 3 * rowH + 2 * gap + 4;
+    ctx.fillStyle = css("--muted"); ctx.font = `11px ${css("--font-data")}`; ctx.textAlign = "center";
+    for (let s = Math.ceil(t0); s <= t1; s++) ctx.fillText(`${s} s`, X(s), yb + 12);
+    ctx.textAlign = "left";
+    ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1.2; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(X(state.t), top); ctx.lineTo(X(state.t), yb); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // ---------- 文字：现在司机在干嘛 ----------
+  const caption = document.getElementById("caption");
+  function phaseText() {
+    const t = state.t, T = state.T;
+    if (state.mode === "diag") {
+      if (t < 0) return ["变道前", "还在本车道直行，方向盘正着"];
+      if (t < EPS) return ["起点", "一下子猛打方向，0.15 秒打满，车里的人被往右一甩"];
+      if (t <= T - EPS) return ["中间", "方向盘正着，车头一直斜着走"];
+      if (t <= T) return ["终点", "一下子猛回方向，车里的人又被甩一下"];
+      return ["变道后", "停在左车道，但刚才两头各被甩了一下"];
+    }
+    if (t < 0) return ["变道前", "还在本车道直行，方向盘正着"];
+    if (t > T) return ["变道后", "方向回正，停在左车道正中间"];
+    const [, , a, j] = sCurve(t, T);
+    if (Math.abs(t - 0.5 * T) < 0.03 * T) return ["正中间", "方向回正，横向速度最快，车身斜着往左滑"];
+    if (a > 0) return [j > 0 ? "第 1 下" : "第 2 下", j > 0 ? "往左打，越打越多" : "往左的方向慢慢回正"];
+    return [j < 0 ? "第 3 下" : "第 4 下", j < 0 ? "往右打，把车头拉回来" : "往右的方向慢慢回正"];
+  }
+  const phaseRows = [...document.querySelectorAll("#phases tbody tr")];
+  function highlightRow() {
+    let k = -1;
+    if (state.mode === "s") {
+      const tau = state.t / state.T;
+      const marks = [0, 0.5 - Math.sqrt(3) / 6, 0.5, 0.5 + Math.sqrt(3) / 6, 1];
+      let best = 1e9;
+      marks.forEach((m, i) => { const dd = Math.abs(tau - m); if (dd < best) { best = dd; k = i; } });
+      if (state.t < -0.2 || state.t > state.T + 0.2) k = state.t < 0 ? 0 : 4;
+    }
+    phaseRows.forEach((tr, i) => tr.classList.toggle("now", i === k));
+  }
+
+  const tread = document.getElementById("tread");
+  const scrub = document.getElementById("scrub");
+  const wheelVal = document.getElementById("wheelVal");
+  const accVal = document.getElementById("accVal");
+  function render() {
+    const [, , a] = f(state.mode, state.t);
+    const deg = wheelDeg(a);
+    drawRoad(); drawWheel(deg); drawGauge(a); drawCharts();
+    wheelVal.textContent = `${deg >= 0 ? "+" : "−"}${Math.abs(deg).toFixed(0)}°${Math.abs(deg) < 0.5 ? "" : deg > 0 ? "（往左）" : "（往右）"}`;
+    accVal.textContent = `${a >= 0 ? "+" : "−"}${Math.abs(a).toFixed(2)} m/s²`;
+    tread.textContent = `t = ${state.t.toFixed(2)} s`;
+    scrub.value = Math.round((state.t + PRE) / (state.T + PRE + POST) * 1000);
+    const [tag, text] = phaseText();
+    caption.innerHTML = `<span class="tag">${tag}</span>${text}`;
+    highlightRow();
+  }
+
+  // ---------- 播放 ----------
+  let last = null;
+  function loop(ts) {
+    if (last !== null && state.playing) {
+      state.t += (ts - last) / 1000 * state.rate;
+      if (state.t > state.T + POST) state.t = -PRE;
+    }
+    last = ts;
+    render();
+    requestAnimationFrame(loop);
+  }
+  const playBtn = document.getElementById("play");
+  const syncPlay = () => { playBtn.textContent = state.playing ? "暂停" : "播放"; };
+  playBtn.addEventListener("click", () => { state.playing = !state.playing; syncPlay(); });
+  syncPlay();
+  function seg(id, key, parse) {
+    const el = document.getElementById(id);
+    el.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      state[key] = parse(b.dataset.v);
+      el.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      if (key === "T") state.t = Math.min(state.t, state.T + POST);
+    });
+  }
+  seg("mode", "mode", (v) => v);
+  seg("dur", "T", Number);
+  seg("rate", "rate", Number);
+  scrub.addEventListener("input", () => {
+    state.playing = false; syncPlay();
+    state.t = scrub.value / 1000 * (state.T + PRE + POST) - PRE;
+  });
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
