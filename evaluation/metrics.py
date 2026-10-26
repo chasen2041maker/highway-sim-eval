@@ -106,3 +106,15 @@ def tracking_metrics(truth: list[dict], tracks: list[dict], gate_m: float = 2.0)
             if name in last_id and last_id[name] != tid:       # 以前配上过，而且编号变了
                 switches += 1
             last_id[name] = tid                                # 记下这一次配上的编号
+
+        missed += len(names) - len(pairs)     #漏：花名册上有、没对上的真车
+        false_tracks += len(ids) - len(pairs)     # 多：名单上有、没对上的纸条
+
+    nan = float("nan")
+    return{
+        "pos_err_m": float(np.mean(pos_errs)) if pos_errs else nan,
+        "speed_err_mps": float(np.mean(speed_errs)) if speed_errs else nan,
+        "id_switches": switches,
+        "missed": missed,
+        "false_tracks": false_tracks,
+    }

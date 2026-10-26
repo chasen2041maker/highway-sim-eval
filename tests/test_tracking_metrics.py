@@ -7,9 +7,6 @@ from ads.tracking import MultiTracker
 from evaluation.metrics import tracking_metrics
 from sim.fake_traffic import DT_S, default_cars, make_scene
 
-# A6 第 4 步还没写完（第 3 块两处待改、第 4 块没写），先整组跳过，免得 CI 变红；写完删掉下面这一行。
-pytestmark = pytest.mark.skip(reason="A6 第 4 步：tracking_metrics 还没写完")
-
 
 def test_perfect_tracker_scores_zero():
     truth = [{"a": (20.0, 0.0, -2.0, 0.0)}, {"a": (19.8, 0.0, -2.0, 0.0)}]
