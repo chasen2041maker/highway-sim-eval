@@ -17,7 +17,7 @@ endif()
 add_executable(hello hello.cpp)
 
 # 跟踪器本体：做成一个库（library），测试和以后的 Python 绑定都用它
-add_library(tracking src/kalman.cpp src/match.cpp)
+add_library(tracking src/kalman.cpp src/match.cpp src/tracker.cpp)
 target_include_directories(tracking PUBLIC include)
 
 # 单元测试：googletest（C++ 里最常用的测试框架，相当于 Python 的 pytest）
@@ -31,7 +31,7 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)   # Windows：gtest 和我们
 FetchContent_MakeAvailable(googletest)
 
 enable_testing()
-add_executable(test_tracking tests/test_kalman.cpp tests/test_match.cpp)
+add_executable(test_tracking tests/test_kalman.cpp tests/test_match.cpp tests/test_tracker.cpp)
 target_link_libraries(test_tracking tracking GTest::gtest_main)
 include(GoogleTest)
 gtest_discover_tests(test_tracking)

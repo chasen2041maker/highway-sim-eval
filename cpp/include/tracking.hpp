@@ -46,3 +46,33 @@ struct XY {
 std::vector<std::pair<int, int>> match_tracks(const std::vector<XY>& pred_xy,
                                               const std::vector<XY>& det_xy,
                                               double gate_m = 2.0);
+
+// 一张纸条：一辆车的编号 + x、y 方向各一个卡尔曼 + 连着几帧没配上。对应 Python 的 Track。
+class Track {
+public:
+    Track(int track_id, XY xy);   // 第一次看到它的那个框的中心 xy；初始速度用默认的 0
+
+    void predict(double dt);      // 猜：x、y 两个卡尔曼各往前推 dt 秒
+    void update(XY xy);           // 改准：x、y 各用框中心合一下；配上了，misses 清零
+    XY xy() const;                // 现在估计的位置。Python 写 t.xy，C++ 要加括号：t.xy()
+                                  // （const = 这个函数只读，不改纸条）
+
+    int id;          // 编号（1、2、3……，发出去就不再变）
+    KalmanCV kx;     // x 方向（往前）
+    KalmanCV ky;     // y 方向（往左）
+    int misses;      // 连着几帧没配上框
+};
+
+// 多车跟踪器：每帧 猜 → 配 → 改准 → 管编号。对应 Python 的 MultiTracker。
+class MultiTracker {
+public:
+    MultiTracker(double gate_m_in = 2.0, int max_misses_in = 10);
+
+    // 处理一帧雷达框，返回处理完以后手里的纸条（就是 tracks）。5 件事和 Python 的 step 一样。
+    const std::vector<Track>& step(const std::vector<XY>& det_xy, double dt = 0.1);
+
+    double gate_m;              // 配对门槛（米）
+    int max_misses;             // 连着没配上超过这么多帧就扔掉
+    std::vector<Track> tracks;  // 现在手里的纸条，按建的先后排
+    int next_id;                // 下一个要发的编号，从 1 开始，只增不减
+};
