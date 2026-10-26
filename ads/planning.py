@@ -1,4 +1,4 @@
-"""规划：跟车（IDM）。以后在这里加 Frenet 变道。"""
+"""规划：跟车（IDM）、停车保持、变道（A7：MOBIL 决定要不要变，Frenet 画变道曲线）。"""
 
 from __future__ import annotations
 import math
@@ -42,3 +42,30 @@ class StopHold:
         elif speed_mps < self.enter_speed_mps and lead_speed_mps < self.enter_lead_mps and gap_m < self.enter_gap_m:
             self.holding = True
         return self.holding
+
+
+# ---------- A7 变道 ----------
+
+def mobil_should_change(me_now: float, me_after: float,
+                        new_back_now: float, new_back_after: float,
+                        old_back_now: float = 0.0, old_back_after: float = 0.0,
+                        politeness: float = 0.0, max_brake_imposed: float = 2.0,
+                        min_gain: float = 0.2) -> bool:
+    """MOBIL：要不要变道（A7 第 1 步）。开车时“看后视镜”那一下。
+
+    在系统里：每帧对左、右两条车道各问一次；回答 True 就交给第 2 步画变道曲线。
+    所有参数都是用 IDM（idm_accel）算出来的加速度，单位 m/s²，负数 = 在刹车：
+        me_now / me_after：我现在 / 变过去以后的加速度；
+        new_back_now / new_back_after：目标车道后车现在 / 我插到它前面以后的加速度；
+        old_back_now / old_back_after：本车道后车现在 / 我走了以后的加速度。
+    politeness：礼貌系数，0 = 只管自己，1 = 别人的损失和自己的好处一样重要。
+    两道检查（HighwayEnv 的默认值：politeness 0、max_brake_imposed 2、min_gain 0.2）：
+        ① 安全：我插进去以后，目标车道后车要刹得比 max_brake_imposed 还狠 → 不变；
+        ② 划算：我的好处 + politeness × (两辆后车的好处) > min_gain → 变，否则不变。
+    """
+    # ① 安全：别逼目标车道后车急刹
+    if new_back_after < -max_brake_imposed:
+        return False
+    # ② 划算：我的好处 + 礼貌 × 两辆后车的好处
+    gain = (me_after - me_now) + politeness * ((new_back_after - new_back_now) + (old_back_after - old_back_now))
+    return gain > min_gain
