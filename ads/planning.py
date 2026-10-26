@@ -69,3 +69,31 @@ def mobil_should_change(me_now: float, me_after: float,
     # ② 划算：我的好处 + 礼貌 × 两辆后车的好处
     gain = (me_after - me_now) + politeness * ((new_back_after - new_back_now) + (old_back_after - old_back_now))
     return gain > min_gain
+
+def lane_change_d(t_s: float, duration_s: float, d_end_m: float, d_start_m: float = 0.0) -> tuple[float, float, float, float]:
+    """变道曲线（A7 第 2 步）：五次多项式，横向偏移 d 随时间从 d_start_m 平滑地变到 d_end_m。
+
+    在系统里：第 1 步 MOBIL 说“变”，这一步算出每个时刻车该往旁边偏多少（Frenet 坐标里的 d）；
+    第 3 步再把 (s, d) 换回地图上的 (x, y)，交给 Pure Pursuit 去跟。
+    d：离本车道中心线多远（米，左正）。变到左边一条车道：d 从 0 到 3.5（车道宽 3.5 米）。
+    duration_s：变道用几秒（T）。
+    返回这一刻的 (d, 横向速度, 横向加速度, 横向 jerk)，单位 m、m/s、m/s²、m/s³。
+    t_s < 0（还没开始）或 t_s > duration_s（已经变完）：位置停在起点 / 终点，速度、加速度、jerk 都是 0。
+
+    公式（τ = t / T 走到第几成，Δ = d_end - d_start）：
+        d        = d_start + Δ · (10τ³ - 15τ⁴ + 6τ⁵)
+        横向速度 = Δ · (30τ² - 60τ³ + 30τ⁴) / T
+        横向加速度 = Δ · (60τ - 180τ² + 120τ³) / T²
+        横向 jerk = Δ · (60 - 360τ + 360τ²) / T³
+    为什么是这几个数：起点、终点各要满足“位置、横向速度 = 0、横向加速度 = 0”三个条件，一共 6 个，
+    五次多项式正好 6 个系数，解出来就是 10、-15、6（这条曲线也是“jerk 最小”的那条）。
+    """
+    delta = d_end_m - d_start_m                  # 一共要横着挪多少米
+    tau = min(max(t_s / duration_s, 0.0), 1.0)    # 走到第几成：0 → 1
+    d = d_start_m + delta * (10 * tau**3 - 15 * tau**4 + 6 * tau**5)
+    if t_s < 0.0 or t_s > duration_s:
+        return d, 0.0, 0.0, 0.0                       # 还没开始 / 已经变完：横向不动
+    v = delta * (30 * tau**2 - 60 * tau**3 + 30 * tau**4) / duration_s
+    a = delta * (60 * tau - 180 * tau**2 + 120 * tau**3) / duration_s**2
+    j = delta * (60 - 360 * tau + 360 * tau**2) / duration_s**3
+    return d, v, a, j
