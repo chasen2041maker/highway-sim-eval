@@ -59,7 +59,7 @@ The project is built to answer:
 | Detection evaluation | Greedy one-to-one matching on center distance; recall, precision, center error | Recall 0.40 / 0.60 / 1.00 at nuScenes gates 0.5 / 2 / 4 m | Done |
 | Tracking | Lead-car speed from LiDAR distances with a constant-velocity Kalman filter; three cars tracked through shuffled boxes with Hungarian matching (2 m gate) and track IDs; scored against ground truth (position / speed error, ID switches, missed, false tracks) | Max speed error 5.55 m/s (frame differencing) → 0.35 m/s (Kalman); `max_misses` 10 vs 3: ID switches 0 vs 1, false-track frames 11 vs 4 | Done (pure Python) |
 
-80 unit tests, with expected values worked out by hand, run by GitHub Actions on every push.
+80 Python unit tests and 21 C++ tests (googletest), with expected values worked out by hand, run by GitHub Actions on every push.
 
 ## Architecture
 
@@ -216,10 +216,11 @@ highway-sim-eval/
 ├─ examples/         runnable experiment scripts
 ├─ scripts/          tooling (README figures, etc.)
 ├─ tests/            unit tests (GitHub Actions runs them on every push)
+├─ cpp/              the tracker in C++17 (Kalman filter, matching, track IDs), CMake + googletest
 └─ docs/             interactive explainers (open in a browser); images/ holds README figures
 ```
 
-Planned additions: `scenarios/` parametric scenario library · `evaluation/` batch runner and metrics · `dashboard/` web dashboard · `mining/` data mining · `learning/` closed-loop training · `cpp/` C++ tracker · `ros2/` ROS 2 publishing and bags.
+Planned additions: `scenarios/` parametric scenario library · `evaluation/` batch runner and metrics · `dashboard/` web dashboard · `mining/` data mining · `learning/` closed-loop training · `ros2/` ROS 2 publishing and bags.
 
 ## Roadmap
 
@@ -229,7 +230,7 @@ Planned additions: `scenarios/` parametric scenario library · `evaluation/` bat
 | **B** Evaluation and data loop | Batch closed-loop evaluation over scenarios | Dozens of scenarios scored automatically, failure replay, version comparison dashboard | Planned |
 | **C** Multimodal data mining | Use vision-language models to understand scenes | Auto-labelling, scenario search in plain language, failure attribution, each with measured accuracy | Planned |
 | **D** Closed-loop learning | Collect → train → evaluate → collect more | Before/after metrics for a small end-to-end model | Planned |
-| **E** Engineering | Performance and deployment | C++ tracker, ROS 2 bags, Dockerised evaluation client | Planned |
+| **E** Engineering | Performance and deployment | C++ tracker, ROS 2 bags, Dockerised evaluation client | In progress (C++ tracker done) |
 
 <details>
 <summary><b>Full checklist</b></summary>
@@ -245,7 +246,7 @@ Planned additions: `scenarios/` parametric scenario library · `evaluation/` bat
 - [x] Pure Pursuit in CARLA (along map lane centre lines, look-ahead comparison)
 - [ ] Traffic and car following (IDM in CARLA behind a scripted lead car with an inner speed loop; stop-and-hold done in the model, CARLA next; traffic to do)
 - [x] LiDAR perception on the simulated LiDAR: ground removal (height cut; RANSAC ground plane on slopes) + DBSCAN + boxes + detection evaluation; switching to the CARLA LiDAR next
-- [x] Multi-object tracking: Kalman filter + Hungarian matching + track management + evaluation (position / speed error, ID switches, missed, false tracks); C++ version later
+- [x] Multi-object tracking: Kalman filter + Hungarian matching + track management + evaluation (position / speed error, ID switches, missed, false tracks); C++ version in `cpp/`
 - [ ] Frenet frame + polynomial trajectories: lane changes and overtaking
 - [ ] Full chain: perception output replaces ground truth, top-down replay
 
@@ -273,7 +274,7 @@ Planned additions: `scenarios/` parametric scenario library · `evaluation/` bat
 **E. Engineering**
 
 - [x] GitHub Actions: every push runs all unit tests (Python 3.10, dependencies pinned in `requirements.txt`)
-- [ ] Kalman tracker in C++ (unit tests, Python bindings)
+- [x] Kalman tracker in C++: CMake + googletest, 21 tests, the whole tracking scene identical to the Python version frame by frame (IDs and positions); Python bindings (pybind11) and a speed comparison later
 - [ ] ROS 2 topics and bag recording
 - [ ] Dockerised evaluation client
 
