@@ -43,7 +43,7 @@ The project is built to answer:
 - **The LiDAR box for the car ahead is 2.30 m short.** Only its rear face is visible, so a min/max box sits on the bumper. No clustering setting fixes it; the distance to the bumper (12.70 m) is still right.
 - **A 4% slope breaks a fixed ground cut.** 3,371 road points from 5 m ahead became obstacles and detection precision fell to 0.04. A RANSAC ground plane fixed it (image above).
 - **Differencing two LiDAR frames is a bad speedometer.** With ±0.2 m range noise at 10 Hz, the speed of the car ahead was off by up to 5.5 m/s. A constant-velocity Kalman filter on the same data stays within 0.35 m/s after the first second (error σ 1.36 → 0.09 m/s).
-- **Losing a car for half a second should not rename it.** Tracking three cars through shuffled, noisy LiDAR boxes, keeping an unmatched track for up to 10 frames held all three IDs through a 0.5 s occlusion. Keeping it for only 3 frames dropped the hidden car at 2.3 s and gave it a new ID at 2.5 s, with its speed estimate starting again from zero. Waiting longer has a cost too: a one-frame guardrail false alarm lived on as a ghost track for a full second.
+- **Losing a car for half a second should not rename it.** Tracking three cars through shuffled, noisy LiDAR boxes, keeping an unmatched track for up to 10 frames held all three IDs through a 0.5 s occlusion. Keeping it for only 3 frames dropped the hidden car at 2.3 s and gave it a new ID at 2.5 s, with its speed estimate starting again from zero. Waiting longer has a cost too: a one-frame guardrail false alarm lived on as a ghost track for a full second. Scored against ground truth, 10 frames vs 3: ID switches 0 vs 1, missed car-frames 0 vs 2, speed error 0.33 vs 0.44 m/s, but false-track frames 11 vs 4. No setting wins every number; the choice depends on which mistake is more dangerous.
 - **CI caught me on day one.** The first GitHub Actions run failed because scikit-learn was missing from `requirements.txt`. It had only ever worked on my laptop.
 
 ## At a glance
@@ -57,9 +57,9 @@ The project is built to answer:
 | Evaluation metric | Point-to-segment lateral error | Nearest-waypoint distance hid up to 0.25 m | Done |
 | LiDAR perception | Ground removal (height cut, RANSAC on slopes), DBSCAN, boxes on a simulated 32-beam scan | Lead car box 2.30 m short (rear face only); slope: 3,371 → 0 false ground points | Done on the simulated LiDAR |
 | Detection evaluation | Greedy one-to-one matching on center distance; recall, precision, center error | Recall 0.40 / 0.60 / 1.00 at nuScenes gates 0.5 / 2 / 4 m | Done |
-| Tracking | Lead-car speed from LiDAR distances with a constant-velocity Kalman filter; three cars tracked through shuffled boxes with Hungarian matching (2 m gate) and track IDs; tracking metrics next | Max speed error 5.55 m/s (frame differencing) → 0.35 m/s (Kalman); IDs kept through a 0.5 s occlusion | In progress |
+| Tracking | Lead-car speed from LiDAR distances with a constant-velocity Kalman filter; three cars tracked through shuffled boxes with Hungarian matching (2 m gate) and track IDs; scored against ground truth (position / speed error, ID switches, missed, false tracks) | Max speed error 5.55 m/s (frame differencing) → 0.35 m/s (Kalman); `max_misses` 10 vs 3: ID switches 0 vs 1, false-track frames 11 vs 4 | Done (pure Python) |
 
-73 unit tests, with expected values worked out by hand, run by GitHub Actions on every push.
+80 unit tests, with expected values worked out by hand, run by GitHub Actions on every push.
 
 ## Architecture
 
@@ -99,8 +99,7 @@ flowchart LR
     classDef done fill:#e8f1fc,stroke:#2a78d6,color:#0b0b0b
     classDef doing fill:#fdeee7,stroke:#eb6834,color:#0b0b0b
     classDef todo fill:#f4f4f2,stroke:#b5b3ad,color:#52514e,stroke-dasharray:4 3
-    class C,T,V,CT,P done
-    class K doing
+    class C,T,V,CT,P,K done
     class R,PL,S,M,MINE,L todo
 ```
 
@@ -183,6 +182,7 @@ Every row comes from a script in `examples/`; the setup column says what was run
 | Speed from LiDAR distances (pure Python) | I follow at 20 m/s, the lead car does 18 m/s, starting 20 m ahead; distance measured each frame at 10 Hz with 0.2 m noise σ, 5 s; `diff_speed` in `ads/tracking.py` takes the difference of neighbouring frames ÷ 0.1 s; `examples/a6_diff_speed.py`; 2 unit tests | True closing speed −2.00 m/s. Differenced speed averages −1.99 but ranges from −7.50 to +3.55 (error σ 2.13, max 5.55 m/s): dividing by 0.1 s multiplies the range noise by 10, and one bad frame pushes its two neighbouring speeds in opposite directions |
 | Kalman filter for the lead car's speed (pure Python) | Same data as the row above; `KalmanCV` in `ads/tracking.py` (state: distance and speed; `predict` pushes the distance ahead at the current speed, `update` blends in the measured distance with gain K; q = 1, r = 0.04, initial speed 0 ± 5 m/s); `examples/a6_kalman.py`; 5 unit tests | After the first second: speed error σ 0.09, max 0.35 m/s (differencing: 1.36, 5.55). At 4.0 s differencing gives −7.50 m/s, the filter −1.97. K (how much of the measured distance is taken in) falls 0.97 → 0.59 → 0.36 over the first 10 frames and settles at 0.27; the speed starts from 0 and reaches −2 in about 0.4 s. Explainer: `docs/a6_kalman.html` |
 | Multi-object tracking (pure Python) | `sim/fake_traffic.py`: three cars ahead (same lane 20 m closing at 2 m/s, left lane 12 m pulling away at 1 m/s, right lane 30 m closing at 3 m/s and hidden 2.0–2.4 s), box centres with 0.2 m noise σ in shuffled order, one guardrail false alarm at 3.5 s; `MultiTracker` in `ads/tracking.py`: each track holds two `KalmanCV` (x, y) and a miss counter; every frame predict → distance table → `match_tracks` (scipy `linear_sum_assignment`: one-to-one, minimum total distance, 2 m gate) → update matched tracks → drop tracks unmatched for more than `max_misses` frames → new IDs for unclaimed boxes; `examples/a6_multi_track.py`; 14 unit tests | `max_misses` 10: IDs 1–3 follow the same cars for all 51 frames; the false alarm becomes ghost ID 4 (3.5–4.5 s) and is dropped at 4.6 s. `max_misses` 3: the hidden right-lane car is dropped at 2.3 s and comes back as ID 4 at 2.5 s (an ID switch: its speed restarts from 0 and the track wobbles for about half a second); the ghost becomes ID 5. Hungarian vs greedy on a two-track case: total distance 2.3 m vs 4.3 m. Explainer: `docs/a6_multi_track.html` |
+| Tracking evaluation (pure Python) | Same scene as the row above, run twice (`max_misses` 10 and 3); `tracking_metrics` in `evaluation/metrics.py` matches tracks to ground-truth cars every frame with the same `match_tracks` (one-to-one, 2 m gate), then counts position / speed error over matched pairs, ID switches (a car matched to a different ID than last time; gaps and first matches do not count), missed cars and unmatched tracks per frame; `examples/a6_track_eval.py`; 7 unit tests | 51 frames × 3 cars. `max_misses` 10 vs 3: position error 0.13 vs 0.14 m, speed error 0.33 vs 0.44 m/s, ID switches 0 vs 1, missed 0 vs 2 car-frames (2.3 and 2.4 s), false tracks 11 vs 4 track-frames (the guardrail ghost). 10 wins four of five numbers and loses only on the ghost |
 | Coordinate transform (CARLA) | Model 3, throttle 0.5, steer 0.1, 3 s | CARLA: y 24.49 → 26.49, yaw 0.98° → 19.77°; after conversion: y −24.49 → −26.49, heading −0.017 → −0.345 rad, matching hand calculation |
 | Synchronous-mode reproducibility | The same script run repeatedly; before and after refactoring `CarlaSim` | Position, heading and speed identical to the last digit |
 | Vehicle differences | Same control input, Model 3 vs CarlaCola truck | Speed at 3 s 5.95 vs 1.44 m/s; heading change per metre travelled about 0.04 rad for both, so the turning radius doesn't depend on speed |
@@ -210,7 +210,7 @@ Time is simulation time in seconds plus the frame number. Every function's docst
 
 ```text
 highway-sim-eval/
-├─ ads/              driving stack: vehicle model, control, IDM car following, LiDAR perception, tracking (in progress)
+├─ ads/              driving stack: vehicle model, control, IDM car following, LiDAR perception, tracking
 ├─ sim/              CARLA connection and synchronous loop, coordinate transforms, simulated LiDAR
 ├─ evaluation/       metrics: lateral error, detection evaluation (recall / precision / centre error)
 ├─ examples/         runnable experiment scripts
@@ -245,7 +245,7 @@ Planned additions: `scenarios/` parametric scenario library · `evaluation/` bat
 - [x] Pure Pursuit in CARLA (along map lane centre lines, look-ahead comparison)
 - [ ] Traffic and car following (IDM in CARLA behind a scripted lead car with an inner speed loop; stop-and-hold done in the model, CARLA next; traffic to do)
 - [x] LiDAR perception on the simulated LiDAR: ground removal (height cut; RANSAC ground plane on slopes) + DBSCAN + boxes + detection evaluation; switching to the CARLA LiDAR next
-- [ ] Multi-object tracking: Kalman filter + Hungarian matching + track management (in progress: Kalman filter, Hungarian matching and track management done; evaluation — position / speed error, ID switches — next)
+- [x] Multi-object tracking: Kalman filter + Hungarian matching + track management + evaluation (position / speed error, ID switches, missed, false tracks); C++ version later
 - [ ] Frenet frame + polynomial trajectories: lane changes and overtaking
 - [ ] Full chain: perception output replaces ground truth, top-down replay
 
