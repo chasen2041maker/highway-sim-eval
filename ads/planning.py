@@ -97,3 +97,26 @@ def lane_change_d(t_s: float, duration_s: float, d_end_m: float, d_start_m: floa
     a = delta * (60 * tau - 180 * tau**2 + 120 * tau**3) / duration_s**2
     j = delta * (60 - 360 * tau + 360 * tau**2) / duration_s**3
     return d, v, a, j
+
+def frenet_to_xy(ref_xy: list[tuple[float, float]], s_m: float, d_m: float) -> tuple[float, float]:
+    """Frenet (s, d) 换成地图上的 (x, y)（A7 第 3 步）。
+
+    在系统里：第 2 步在 (s, d) 里画好变道曲线（路再弯，d 也只是 0 → 3.5），
+    这个函数把每个 (s, d) 换回地图坐标，交给 Pure Pursuit 去跟。
+    ref_xy：参考线（本车道中心线）上的一串点，按前进方向排，点要密（比如每 0.5 米一个）。
+    s_m：沿参考线走了多远（米）；d_m：离参考线多远（米，往路的左边为正）。
+    做法：沿参考线一段一段量长度，找到 s 落在哪一段；在这段上插值出参考点 (xr, yr) 和这段的朝向 θ；
+          再从参考点往“路的左边”走 d 米（路的左边 = 朝向转 90°，方向是 (-sin θ, cos θ)）。
+    s 超出参考线两头时，沿第一段 / 最后一段往外延长。
+    """
+    walked = 0.0              # 前面几段一共多长
+    for k in range(len(ref_xy) - 1):
+        (x0, y0), (x1, y1) = ref_xy[k], ref_xy[k + 1]
+        seg = math.hypot(x1 - x0,y1 - y0)      # 这一段多长
+        if walked + seg >= s_m or k == len(ref_xy) - 2:
+            r = (s_m -walked) / seg  # 在这一段上走了几成（< 0 或 > 1 就是往外延长）
+            xr = x0 + r * (x1 - x0)                   # 参考点：本车道中心线上，走了 s 米的地方
+            yr = y0 + r * (y1 - y0)
+            theta = math.atan2(y1 - y0, x1 - x0)      # 这一段路朝哪个方向
+            return xr - d_m * math.sin(theta), yr + d_m * math.cos(theta)   # 往路的左边走 d 米
+        walked += seg

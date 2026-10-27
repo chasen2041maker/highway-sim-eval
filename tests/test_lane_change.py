@@ -1,8 +1,8 @@
-"""A7 变道的测试：MOBIL（第 1 步，数字都是手设的加速度）、五次多项式变道曲线（第 2 步）。"""
+"""A7 变道的测试：MOBIL（第 1 步，数字都是手设的加速度）、五次多项式变道曲线（第 2 步）、Frenet 换地图坐标（第 3 步）。"""
 
 import math
 
-from ads.planning import lane_change_d, mobil_should_change
+from ads.planning import frenet_to_xy, lane_change_d, mobil_should_change
 
 
 def test_mobil_changes_when_safe_and_worth_it():
@@ -59,3 +59,33 @@ def test_lane_change_twice_as_fast_is_four_times_harder():
     peak4 = max(abs(lane_change_d(k * 0.001, 4.0, 3.5)[2]) for k in range(4001))
     peak2 = max(abs(lane_change_d(k * 0.0005, 2.0, 3.5)[2]) for k in range(4001))
     assert math.isclose(peak2 / peak4, 4.0, rel_tol=1e-3)
+
+
+# ---------- 第 3 步：Frenet (s, d) → 地图 (x, y) ----------
+
+def test_frenet_straight_road_along_x():
+    # 路朝右（+x）开：s 就是 x，d 就是 y
+    ref = [(float(i), 0.0) for i in range(21)]
+    assert frenet_to_xy(ref, 10.0, 2.0) == (10.0, 2.0)
+
+
+def test_frenet_road_heading_up_left_is_minus_x():
+    # 路朝上（+y）开：往前 5 米、往左 3.5 米 → 地图上是 (-3.5, 5)（小检查那道题）
+    ref = [(0.0, float(i)) for i in range(21)]
+    x, y = frenet_to_xy(ref, 5.0, 3.5)
+    assert math.isclose(x, -3.5) and math.isclose(y, 5.0)
+
+
+def test_frenet_on_a_left_curve():
+    # 半径 20 米左转 90°：圆心 (0, 20)，从 (0, 0) 朝 +x 出发，转完在 (20, 20) 朝 +y
+    # 走完整个弯（s = 10π）、往左 3.5 米（弯的里侧）→ (16.5, 20)
+    n = 2000
+    ref = [(20 * math.sin(k / n * math.pi / 2), 20 - 20 * math.cos(k / n * math.pi / 2)) for k in range(n + 1)]
+    x, y = frenet_to_xy(ref, 10 * math.pi, 3.5)
+    # 参考线是一小段一小段的直线（这里 2000 段），每段的朝向和真圆差半段的角度，误差约 1 毫米
+    assert math.isclose(x, 16.5, abs_tol=0.01) and math.isclose(y, 20.0, abs_tol=0.01)
+
+
+def test_frenet_extends_past_the_end():
+    ref = [(float(i), 0.0) for i in range(11)]          # 只有 0 到 10 米
+    assert frenet_to_xy(ref, 12.0, 0.0) == (12.0, 0.0)   # 沿最后一段往外延长
