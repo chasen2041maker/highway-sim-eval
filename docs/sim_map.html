@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>智驾仿真全景地图</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 布局：上面一排“第几课”按钮 → 一张完整的地图（每课点亮一块、流动的线表示数据怎么走）→ 下面是老师的讲解卡和一道小题 */
+:root {
+  --bg: #eef2f1; --surface: #ffffff; --ink: #17211e; --muted: #5b6a65; --line: #cfd9d5;
+  --box: #f7faf9; --box-edge: #b9c6c1;
+  --exam: #0f8f86;      /* 考题 / 考场 / 阅卷：主线 */
+  --loop: #c27a12;      /* 数据闭环 */
+  --student: #4a63c9;   /* 考生 */
+  --ladder: #7a5bb5;    /* 在环阶梯 */
+  --pin: #d2493f;       /* 你在这里 */
+  --chip: #e6eeeb;
+  --font-display: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111617; --surface: #192022; --ink: #e3ebe8; --muted: #93a39e; --line: #2b3538;
+    --box: #1d2527; --box-edge: #3a4749;
+    --exam: #3cc7bb; --loop: #f0a53a; --student: #8ea2ff; --ladder: #b79bf0; --pin: #ff7a6e; --chip: #243033;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111617; --surface: #192022; --ink: #e3ebe8; --muted: #93a39e; --line: #2b3538;
+  --box: #1d2527; --box-edge: #3a4749;
+  --exam: #3cc7bb; --loop: #f0a53a; --student: #8ea2ff; --ladder: #b79bf0; --pin: #ff7a6e; --chip: #243033;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 16px; }
+.wrap > * { min-width: 0; }
+header h1 { font-family: var(--font-display); font-size: clamp(24px, 4vw, 34px); margin: 0 0 4px; letter-spacing: 0.02em; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.eyebrow { font-size: 12px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; font-family: var(--font-data); }
+.steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.steps button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 99px; padding: 3px 11px; cursor: pointer; }
+.steps button[aria-current="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.steps button:focus-visible, .nav button:focus-visible, .opts button:focus-visible { outline: 2px solid var(--exam); outline-offset: 2px; }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.map-scroll { overflow-x: auto; }
+svg.map { display: block; width: 100%; min-width: 720px; height: auto; }
+.lesson { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+@media (max-width: 760px) { .lesson { grid-template-columns: 1fr; } }
+.lesson h2 { font-family: var(--font-display); font-size: 22px; margin: 0 0 6px; text-wrap: balance; }
+.lesson .num { font-family: var(--font-data); font-size: 12px; color: var(--muted); letter-spacing: 0.08em; }
+.lesson ul { margin: 6px 0 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.lesson .analogy { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--chip); font-size: 14px; }
+.check { display: grid; gap: 8px; align-content: start; }
+.check .q { font-weight: 700; }
+.opts { display: grid; gap: 6px; }
+.opts button { font: inherit; text-align: left; border: 1px solid var(--line); background: var(--box); color: var(--ink); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.opts button.right { border-color: var(--exam); background: color-mix(in srgb, var(--exam) 14%, var(--box)); }
+.opts button.wrong { border-color: var(--pin); background: color-mix(in srgb, var(--pin) 12%, var(--box)); }
+.explain { font-size: 14px; color: var(--muted); min-height: 1.4em; }
+.nav { display: flex; gap: 8px; justify-content: space-between; margin-top: 12px; }
+.nav button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 6px 16px; cursor: pointer; background: var(--exam); color: #fff; }
+.nav button[disabled] { opacity: 0.35; cursor: default; }
+.nav button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+footer { font-size: 12px; color: var(--muted); }
+footer a { color: inherit; }
+
+/* ---------- 地图 ---------- */
+.node rect.frame { fill: var(--box); stroke: var(--box-edge); stroke-width: 1.5; }
+.node .title { font-family: var(--font-body); font-weight: 700; font-size: 22px; fill: var(--ink); }
+.node .tag { font-family: var(--font-body); font-weight: 700; font-size: 14px; }
+.node .line { font-family: var(--font-body); font-size: 15px; fill: var(--muted); }
+.node .chip rect { fill: var(--chip); }
+.node .chip text { font-family: var(--font-data); font-size: 12px; fill: var(--ink); }
+.node.exam .tag { fill: var(--exam); } .node.exam rect.frame { stroke: var(--exam); }
+.node.loop .tag { fill: var(--loop); } .node.loop rect.frame { stroke: var(--loop); }
+.node.student .tag { fill: var(--student); } .node.student rect.frame { stroke: var(--student); }
+.node.ladder rect.frame { stroke: var(--ladder); }
+.node.ladder .tag { fill: var(--ladder); }
+.rung rect { fill: color-mix(in srgb, var(--ladder) 18%, var(--box)); stroke: var(--ladder); stroke-width: 1; }
+.rung text { font-family: var(--font-data); font-size: 13px; fill: var(--ink); text-anchor: middle; }
+.rung .sub { font-family: var(--font-body); font-size: 11px; fill: var(--muted); }
+.node, .flow, .flow-label { transition: opacity 0.35s ease; }
+.dim { opacity: 0.16; }
+.flow { fill: none; stroke-width: 2.5; stroke-linecap: round; }
+.flow.exam { stroke: var(--exam); } .flow.loop { stroke: var(--loop); } .flow.student { stroke: var(--student); }
+.flow.on { stroke-dasharray: 9 7; animation: dash 1.1s linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -32; } }
+.flow-label { font-family: var(--font-body); font-size: 13px; fill: var(--muted); }
+.arrowhead-exam { fill: var(--exam); } .arrowhead-loop { fill: var(--loop); } .arrowhead-student { fill: var(--student); }
+.packet { fill: var(--loop); stroke: var(--surface); stroke-width: 2; }
+.pin { display: none; }
+.pins-on .pin { display: inline; }
+.pin circle { fill: var(--pin); }
+.pin text { font-family: var(--font-data); font-weight: 600; font-size: 13px; fill: #fff; text-anchor: middle; dominant-baseline: central; }
+.pin .note { fill: var(--pin); font-family: var(--font-body); font-size: 13px; font-weight: 700; text-anchor: start; }
+.toggle-engine text { font-family: var(--font-body); font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .flow.on { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">highway-sim-eval · 学习地图</div>
+    <h1>智驾仿真全景地图</h1>
+    <p>一句话：<b>仿真就是给智驾办一场考试</b>——出题（场景库）、考场（仿真平台）、考生（被测系统）、阅卷（评价体系），外面再套一圈数据闭环，让考题越来越难。点下面的“第几课”或“下一课”，一块一块地看；每课最后有一道小题。</p>
+  </header>
+
+  <nav class="steps" id="steps" aria-label="课程目录"></nav>
+
+  <div class="stage">
+    <div class="map-scroll">
+      <svg class="map" id="map" viewBox="0 0 1200 690" role="img" aria-label="智驾仿真全景地图">
+        <defs>
+          <marker id="ah-exam" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead-exam"/></marker>
+          <marker id="ah-loop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead-loop"/></marker>
+          <marker id="ah-student" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead-student"/></marker>
+        </defs>
+
+        <!-- 流动的线（先画，压在方块下面） -->
+        <path id="f-q2p" class="flow exam" d="M340,115 L428,115" marker-end="url(#ah-exam)"/>
+        <text class="flow-label" id="l-q2p" x="352" y="104">出题</text>
+        <path id="f-p2e" class="flow exam" d="M770,115 L858,115" marker-end="url(#ah-exam)"/>
+        <text class="flow-label" id="l-p2e" x="780" y="104">交答卷</text>
+        <path id="f-p2s" class="flow student" d="M560,210 L560,253" marker-end="url(#ah-student)"/>
+        <text class="flow-label" id="l-p2s" x="468" y="240">传感器画面</text>
+        <path id="f-s2p" class="flow student" d="M640,253 L640,212" marker-end="url(#ah-student)"/>
+        <text class="flow-label" id="l-s2p" x="650" y="240">方向盘、油门</text>
+        <path id="f-w2h" class="flow loop" d="M190,540 L190,402" marker-end="url(#ah-loop)"/>
+        <text class="flow-label" id="l-w2h" x="198" y="476">采回数据</text>
+        <path id="f-h2q" class="flow loop" d="M190,290 L190,212" marker-end="url(#ah-loop)"/>
+        <text class="flow-label" id="l-h2q" x="198" y="256">变成新考题</text>
+        <path id="f-e2f" class="flow loop" d="M1010,210 L1010,288" marker-end="url(#ah-loop)"/>
+        <text class="flow-label" id="l-e2f" x="1018" y="256">考砸的场景</text>
+        <path id="f-f2o" class="flow loop" d="M1010,400 L1010,538" marker-end="url(#ah-loop)"/>
+        <text class="flow-label" id="l-f2o" x="1018" y="476">新版本考过了</text>
+        <path id="f-o2w" class="flow loop" d="M860,606 L342,606" marker-end="url(#ah-loop)"/>
+        <text class="flow-label" id="l-o2w" x="520" y="596">推送给车队，开出新数据</text>
+        <circle id="packet" class="packet" r="7" cx="-20" cy="-20"/>
+
+        <!-- 场景库 -->
+        <g class="node exam" id="n-q">
+          <rect class="frame" x="40" y="30" width="300" height="180" rx="12"/>
+          <text class="title" x="60" y="66">场景库</text><text class="tag" x="140" y="66">考题</text>
+          <text class="line" x="60" y="98">功能 → 逻辑 → 具体</text>
+          <text class="line" x="60" y="124">人写 · 真实回放重建 · AI 生成</text>
+          <g class="chip"><rect x="60" y="148" width="100" height="24" rx="6"/><text x="110" y="165" text-anchor="middle">OpenDRIVE</text></g>
+          <g class="chip"><rect x="168" y="148" width="124" height="24" rx="6"/><text x="230" y="165" text-anchor="middle">OpenSCENARIO</text></g>
+        </g>
+        <!-- 仿真平台 -->
+        <g class="node exam" id="n-p">
+          <rect class="frame" x="430" y="30" width="340" height="180" rx="12"/>
+          <text class="title" x="450" y="66">仿真平台</text><text class="tag" x="548" y="66">考场</text>
+          <text class="line" x="450" y="98">搭场景 → 车和传感器 → 接口和云</text>
+          <g class="toggle-engine">
+            <rect x="450" y="114" width="146" height="30" rx="6" fill="var(--chip)"/><text x="523" y="134" text-anchor="middle" fill="var(--ink)">物理 / 游戏引擎</text>
+            <rect x="604" y="114" width="146" height="30" rx="6" fill="var(--chip)"/><text x="677" y="134" text-anchor="middle" fill="var(--ink)">世界模型</text>
+          </g>
+          <text class="line" x="450" y="168">CARLA · PreScan · CarMaker</text>
+          <text class="line" x="450" y="192">Cosmos · X-World（学出来的）</text>
+        </g>
+        <!-- 评价体系 -->
+        <g class="node exam" id="n-e">
+          <rect class="frame" x="860" y="30" width="300" height="180" rx="12"/>
+          <text class="title" x="880" y="66">评价体系</text><text class="tag" x="978" y="66">阅卷</text>
+          <text class="line" x="880" y="98">安全 · 守规 · 舒适 · 效率</text>
+          <text class="line" x="880" y="124">通过 / 不通过 · 新旧版本对比</text>
+          <g class="chip"><rect x="880" y="148" width="92" height="24" rx="6"/><text x="926" y="165" text-anchor="middle">ISO 26262</text></g>
+          <g class="chip"><rect x="980" y="148" width="132" height="24" rx="6"/><text x="1046" y="165" text-anchor="middle">SOTIF 21448</text></g>
+        </g>
+        <!-- 被测系统 -->
+        <g class="node student" id="n-s">
+          <rect class="frame" x="470" y="255" width="260" height="110" rx="12"/>
+          <text class="title" x="490" y="290">被测系统</text><text class="tag" x="588" y="290">考生</text>
+          <text class="line" x="490" y="320">模块化：感知 → 规划 → 控制</text>
+          <text class="line" x="490" y="346">或 端到端：一个大网络</text>
+        </g>
+        <!-- 在环阶梯 -->
+        <g class="node ladder" id="n-l">
+          <rect class="frame" x="370" y="395" width="460" height="140" rx="12"/>
+          <text class="tag" x="390" y="422">在环阶梯：越往右越真、越贵、跑得越少</text>
+          <g class="rung" id="r-mil"><rect x="390" y="485" width="62" height="36" rx="5"/><text x="421" y="508">MIL</text></g>
+          <g class="rung" id="r-sil"><rect x="462" y="473" width="62" height="48" rx="5"/><text x="493" y="502">SIL</text></g>
+          <g class="rung"><rect x="534" y="461" width="62" height="60" rx="5"/><text x="565" y="496">HIL</text></g>
+          <g class="rung"><rect x="606" y="449" width="62" height="72" rx="5"/><text x="637" y="490">VIL</text></g>
+          <g class="rung"><rect x="678" y="437" width="62" height="84" rx="5"/><text x="709" y="484">场地</text></g>
+          <g class="rung"><rect x="750" y="425" width="62" height="96" rx="5"/><text x="781" y="478">道路</text></g>
+        </g>
+        <!-- 数据闭环：挖难例 / 修和训练 / 真实道路 / OTA -->
+        <g class="node loop" id="n-h">
+          <rect class="frame" x="40" y="290" width="300" height="110" rx="12"/>
+          <text class="title" x="60" y="326">挖难例</text>
+          <text class="line" x="60" y="356">急刹、接管、险些碰撞</text>
+          <text class="line" x="60" y="380">从海量数据里自动找出来</text>
+        </g>
+        <g class="node loop" id="n-f">
+          <rect class="frame" x="860" y="290" width="300" height="110" rx="12"/>
+          <text class="title" x="880" y="326">修 bug / 训练</text>
+          <text class="line" x="880" y="356">考砸的场景 → 改代码</text>
+          <text class="line" x="880" y="380">或补数据、重新训练模型</text>
+        </g>
+        <g class="node loop" id="n-w">
+          <rect class="frame" x="40" y="540" width="300" height="130" rx="12"/>
+          <text class="title" x="60" y="576">真实道路</text><text class="tag" x="158" y="576">车队</text>
+          <text class="line" x="60" y="608">路测车 · 量产车</text>
+          <text class="line" x="60" y="634">每天采回大量数据</text>
+        </g>
+        <g class="node loop" id="n-o">
+          <rect class="frame" x="860" y="540" width="300" height="130" rx="12"/>
+          <text class="title" x="880" y="576">OTA 上车</text>
+          <text class="line" x="880" y="608">回归考过了才推送</text>
+          <text class="line" x="880" y="634">新版本开出新数据</text>
+        </g>
+
+        <!-- 第 9 课：你在这里 -->
+        <g class="pin"><circle cx="725" cy="262" r="15"/><text x="725" y="262">A</text></g>
+        <g class="pin"><circle cx="333" cy="38" r="15"/><text x="333" y="38">B</text></g>
+        <g class="pin"><circle cx="1153" cy="38" r="15"/><text x="1153" y="38">B</text></g>
+        <g class="pin"><circle cx="333" cy="298" r="15"/><text x="333" y="298">C</text></g>
+        <g class="pin"><circle cx="1110" cy="62" r="15"/><text x="1110" y="62">C</text></g>
+        <g class="pin"><circle cx="1153" cy="298" r="15"/><text x="1153" y="298">D</text></g>
+        <g class="pin"><circle cx="763" cy="38" r="15"/><text x="763" y="38">B7</text></g>
+        <g class="pin"><circle cx="493" cy="458" r="11"/><text class="note" x="420" y="452" style="text-anchor:middle">你在这里</text></g>
+      </svg>
+    </div>
+  </div>
+
+  <section class="lesson" aria-live="polite">
+    <div>
+      <div class="num" id="lnum"></div>
+      <h2 id="ltitle"></h2>
+      <ul id="lbody"></ul>
+      <div class="analogy" id="lanalogy"></div>
+    </div>
+    <div class="check">
+      <div class="num">小题（只选一个）</div>
+      <div class="q" id="cq"></div>
+      <div class="opts" id="copts"></div>
+      <div class="explain" id="cexp"></div>
+      <div class="nav">
+        <button class="ghost" id="prev" type="button">上一课</button>
+        <button id="next" type="button">下一课</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    依据：浙大学报 2026《自动驾驶综合仿真平台的现状与展望》；PEGASUS 场景六层模型（<a href="https://www.offis.de/offis/publikation/6-layer-model-for-a-structured-description-and-categorization-of-urban-traffic-and-environment.html">OFFIS</a>）；Applied Intuition 验证与确认手册（<a href="https://www.appliedintuition.com/kr/blog/verification-and-validation-handbook-part-2">一个加塞测试可以有 160 万种变化</a>）；SOTIF 四象限（<a href="https://www.itemis.com/en/glossary/sotif/">itemis</a>）；ASAM OpenX 标准。读书笔记：vla_basic/learning/PAPER_NOTES_SIM_SURVEY_2026.md
+  </footer>
+</div>
+
+<script>
+(() => {
+  const ALL_NODES = ["n-q", "n-p", "n-e", "n-s", "n-l", "n-h", "n-f", "n-w", "n-o"];
+  const ALL_FLOWS = ["q2p", "p2e", "p2s", "s2p", "w2h", "h2q", "e2f", "f2o", "o2w"];
+  const LOOP = ["w2h", "h2q", "q2p", "p2e", "e2f", "f2o", "o2w"];
+  const L = [
+    {
+      t: "总览：仿真就是一场考试",
+      nodes: ALL_NODES, flows: ALL_FLOWS, packet: LOOP,
+      b: ["<b>出题</b>：场景库（左上），比如“高速上旁车突然加塞”。",
+          "<b>考场</b>：仿真平台（中上），把题目“演”出来，把画面发给考生。",
+          "<b>考生</b>：被测的智驾系统（正中），看画面、打方向、踩油门。",
+          "<b>阅卷</b>：评价体系（右上），撞没撞、晃不晃、有没有违规。",
+          "外面那一圈<b>橙色</b>是数据闭环：真车开出来的难题，不断变成新考题，系统越考越强。"],
+      a: "比方：驾校考试。题库、考场、学员、考官，四样缺一不可；真实路上遇到的新情况，再补进题库。",
+      q: "这张地图里，“考场”指的是哪一块？", o: ["仿真平台", "评价体系"], ans: 0,
+      e: "对，仿真平台是考场；评价体系是阅卷老师。",
+    },
+    {
+      t: "为什么要仿真",
+      nodes: ["n-w", "n-s"], flows: [],
+      b: ["真车路测<b>又贵、又慢、又危险</b>：不能真的让车去撞一个小孩来测。",
+          "最要命的是<b>长尾</b>：路上掉了床垫、交警手势指挥、事故现场——可能开几十万公里才碰到一次。",
+          "<b>组合爆炸</b>：同一个“加塞”场景，车速、距离、时机、天气一组合，可以变出上百万种（Applied Intuition 举的例子是 160 万种），真车根本测不完。",
+          "仿真能<b>批量造、反复跑、零风险</b>，还比真车快。"],
+      a: "比方：飞行员先在模拟器里练上千次发动机失灵，真飞机上一辈子可能都遇不到一次。",
+      q: "为什么不能全靠真车路测？", o: ["太贵太慢太危险，长尾场景碰不到、测不完", "真车上的传感器测不准"], ans: 0,
+      e: "对。仿真不是替代真车，而是把大量测试挪到便宜、安全的地方先做。",
+    },
+    {
+      t: "考生：被测系统",
+      nodes: ["n-s", "n-p"], flows: ["p2s", "s2p"],
+      b: ["<b>模块化</b>：感知 → 规划 → 控制，一块一块写。你 A 块写的就是这种（激光雷达找车、卡尔曼跟踪、IDM 跟车、变道、Pure Pursuit）。",
+          "<b>端到端</b>：一个大网络，画面进去、轨迹出来（特斯拉、小鹏、华为……）。",
+          "考生<b>不知道自己在考场里</b>：它只收到传感器画面，发出方向盘、油门、刹车。蓝色的两根线就是这一来一回。",
+          "端到端没法拆开单考感知，只能看<b>整体开得好不好</b>——所以闭环考试越来越重要。"],
+      a: "比方：驾考学员。模块化像“先背交规、再练倒库、再上路”分开考；端到端像直接上路，只看你开得怎么样。",
+      q: "端到端的考生，能不能把“感知”单独拿出来考？", o: ["不能，基本只能看整体开得好不好", "能，和模块化一样"], ans: 0,
+      e: "对。所以评测从“考模块”转向“考整车行为”，这正是闭环仿真的价值。",
+    },
+    {
+      t: "考题：场景库",
+      nodes: ["n-q", "n-h"], flows: ["h2q"],
+      b: ["<b>三层抽象</b>：功能场景“高速上旁车加塞” → 逻辑场景“车速 60–120 km/h、距离 5–30 m” → 具体场景“车速 80、距离 12 m”。一个逻辑场景能抽出成千上万个具体场景。",
+          "<b>一个场景有六层要素</b>（PEGASUS 模型）：路网、路边设施、临时改动（施工）、会动的物体、天气光照、数字信息（V2X）。",
+          "<b>考题从哪来</b>：人写的（你 B1 要做的）、真实数据回放和重建、AI 生成（写剧本 / 拍成片 / 用嘴改）。",
+          "<b>标准格式</b>：路用 OpenDRIVE 描述，剧情（谁在什么时候干什么）用 OpenSCENARIO 描述。"],
+      a: "比方：出卷子。功能场景是“考一道加塞题”，逻辑场景是“题目里的数可以在这个范围里变”，具体场景是“这一张卷子上的具体数字”。",
+      q: "“车速 60–120 km/h、距离 5–30 m”属于哪一层？", o: ["逻辑场景", "具体场景"], ans: 0,
+      e: "对。逻辑场景给的是范围；从里面挑出一组具体数字，才是具体场景。",
+    },
+    {
+      t: "考场：仿真平台",
+      nodes: ["n-p", "n-q", "n-s"], flows: ["q2p", "p2s", "s2p"],
+      b: ["<b>三步搭</b>：搭场景（路、楼、车、人、天气）→ 车和传感器（车怎么动、摄像头和雷达看到什么）→ 接口和云（和考生互传数据，云上同时开很多场）。",
+          "<b>两类考场</b>：<b>物理 / 游戏引擎</b>（CARLA、PreScan、CarMaker）——人写的物理规则，<b>真值精确</b>（车到底在哪、撞没撞）；<b>世界模型</b>（英伟达 Cosmos、小鹏 X-World）——从视频里学出来的世界，画面更真、能造没录过的情况，但没现成真值、会“幻觉”。",
+          "好考场要做到三件事：<b>看起来真、跑得快、好扩展</b>。"],
+      a: "比方：拍电影。先搭片场、请群众演员，再架好主角的车和摄影机，最后导演和主角用对讲机沟通；云上就是好几个剧组同时开拍。",
+      q: "想精确知道“撞没撞”，哪种考场更靠谱？", o: ["物理 / 游戏引擎（如 CARLA）", "世界模型"], ans: 0,
+      e: "对。所以评测的基本功先在有真值的 CARLA 上练，世界模型作为第二个考场（你计划里的 B7）。",
+    },
+    {
+      t: "怎么考：开环、闭环和在环阶梯",
+      nodes: ["n-s", "n-p", "n-l"], flows: ["p2s", "s2p"], highlightSil: true,
+      b: ["<b>开环</b>：放一段录好的真实数据，看考生输出的轨迹和当时人开的差多少——简单，但世界不会因为考生的决定而改变，分数会误导。",
+          "<b>闭环</b>：考生真的在考场里开，世界跟着反应（前车被逼近了，后车也会刹）。蓝线一来一回，就是闭环。",
+          "<b>在环阶梯</b>：MIL（只有模型）→ SIL（真软件、假世界）→ HIL（真控制器硬件）→ VIL（整辆真车）→ 封闭场地 → 开放道路。越往右越真、越贵、越慢、能跑的次数越少。",
+          "所以绝大多数测试堆在左边的 <b>SIL</b>；右边留给最后的确认。"],
+      a: "比方：先在纸上做题（MIL），再在电脑上做模拟卷（SIL），再上驾校的模拟器（HIL），最后才上考场的真车。",
+      q: "你在 CARLA 里跑自己写的 Python 驾驶系统，属于哪一级？", o: ["SIL（软件在环）", "HIL（硬件在环）"], ans: 0,
+      e: "对。真软件 + 仿真世界 = SIL。HIL 要把真的控制器硬件接进来。",
+    },
+    {
+      t: "打分：评价体系",
+      nodes: ["n-e", "n-p"], flows: ["p2e"],
+      b: ["<b>四类指标</b>：安全（碰撞、最小车距、TTC 还有几秒撞上）、守规（闯灯、压线）、舒适（急刹、横向加速度、jerk）、效率（到没到、用了多久）。",
+          "<b>判定</b>：每个场景给出通过 / 不通过，必须项全过才算过。",
+          "<b>回归对比</b>：新版本和旧版本跑同一套题，哪些场景变好了、哪些变差了——这是公司里每天都在做的事。",
+          "<b>两个安全标准</b>：ISO 26262 管“东西坏了怎么办”；SOTIF（ISO 21448）管“没坏，但能力不够”，比如逆光时摄像头看不见。SOTIF 的目标是把<b>“未知的危险场景”</b>越缩越小——仿真正是找它们的主力。",
+          "浙大那篇综述说，行业最缺的就是<b>统一的评价指标</b>——也就是你 B4、B5 要做的。"],
+      a: "比方：阅卷。不只看总分，还要看错在哪类题、这次比上次进步在哪、退步在哪。",
+      q: "摄像头好好的，但低角度阳光下没看见障碍物，归哪个标准管？", o: ["ISO 26262（故障）", "SOTIF（能力不足）"], ans: 1,
+      e: "对，是 SOTIF：系统没坏，只是在这种情况下能力不够。",
+    },
+    {
+      t: "数据闭环：让考题越来越难",
+      nodes: ["n-w", "n-h", "n-q", "n-p", "n-e", "n-f", "n-o"], flows: LOOP, packet: LOOP,
+      b: ["车队每天开出海量数据 → 自动<b>挖出难例</b>（急刹、司机接管、险些碰撞）→ 变成<b>新考题</b>加进场景库。",
+          "新旧版本一起<b>回归考试</b> → 考砸的场景交给工程师<b>修 bug</b>，或补数据<b>重新训练</b>模型。",
+          "新版本回归考过了，才 <b>OTA 推送</b>给车队 → 车队又开出新数据。",
+          "这个圈转得越快，系统进步越快。特斯拉把它叫作 data engine（数据引擎）；小鹏用世界模型 X-World 当里面的评估引擎。"],
+      a: "比方：错题本。每次考试把错题抄下来、找同类题反复练，下次考试再验证有没有真会了。",
+      q: "新的难题，主要从哪来？", o: ["从车队的真实数据里自动挖出来", "全靠工程师坐在办公室里想"], ans: 0,
+      e: "对。人想的题有限，真实世界才是最好的出题人；你计划里的 C0 难例挖掘就是这一步。",
+    },
+    {
+      t: "谁在做、有哪些岗位",
+      nodes: ALL_NODES, flows: [],
+      b: ["<b>考场的“发动机”</b>：开源 CARLA；商业 PreScan、CarMaker、CarSim、51WORLD SimOne、腾讯 TAD Sim；英伟达 DriveSim、Cosmos。",
+          "<b>做整套考试系统的公司</b>：每家车企和智驾公司的仿真团队（小鹏、华为、理想、Momenta、地平线……）；国外有专门做这一行的 Applied Intuition、Foretellix。",
+          "<b>三类岗位</b>：仿真测试（在考场里出题、考试、写报告）；<b>仿真开发</b>（建考场、做题库、做阅卷系统、数据管线——你的目标）；仿真算法（让考场更真：神经渲染、世界模型）。",
+          "现成的 CARLA 就像 MySQL：有了它不等于有了淘宝，公司要在上面搭出整套考试系统。"],
+      a: "比方：驾校行业里，有造模拟器的厂家，有开驾校的，有出题的，有当考官的。你要做的是“开驾校、建考试系统”的那拨人。",
+      q: "你的目标岗位是哪一类？", o: ["仿真开发：建考场、题库和阅卷系统", "仿真测试：用现成考场出题考试"], ans: 0,
+      e: "对。本质是后端 + 数据工程 + 懂智驾，你的后端经验正好用上。",
+    },
+    {
+      t: "你在这里",
+      nodes: ALL_NODES, flows: ["p2s", "s2p", "h2q", "p2e"], pins: true, highlightSil: true,
+      b: ["<b>A 块 = 考生</b>：你从零写了一个模块化驾驶系统（控制、跟车、激光雷达、跟踪、变道），C++ 版跟踪器也有了。基本完成，剩 CARLA 里的收尾和 A8。",
+          "<b>B 块 = 考题 + 考场调度 + 阅卷</b>：场景库（含 OpenSCENARIO）、批量运行、指标、回归报告——<b>下一步就做这个</b>。",
+          "<b>C 块 = 闭环里的“挖”和“判”</b>：难例挖掘、多模态 Review 智能体（用你的 Agent 本职）。",
+          "<b>D 块 = 修 / 训练</b>：用自己的考场训一个小模型。<b>B7</b> = 世界模型当第二个考场。",
+          "你现在站在 <b>SIL + 闭环</b> 这一级：真软件、仿真世界。"],
+      a: "一句话给面试官：“我从零写了一个考生，又在给它建一整套考试系统；行业最缺的统一评价，正是我在做的。”",
+      q: "下一步 B 块要建的，是地图上哪一块？", o: ["考题 + 阅卷（场景库、评价体系）", "考生（被测系统）"], ans: 0,
+      e: "对。考生（A 块）已经有了，接下来给它建考试系统。",
+    },
+  ];
+
+  const svg = document.getElementById("map");
+  const stepsNav = document.getElementById("steps");
+  let cur = 0;
+  L.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = i === 0 ? "总览" : `第 ${i} 课`;
+    b.title = s.t;
+    b.addEventListener("click", () => go(i));
+    stepsNav.appendChild(b);
+  });
+
+  // 数据包沿着一串线跑
+  const packet = document.getElementById("packet");
+  let packetChain = null, packetStart = 0;
+  function tick(ts) {
+    if (packetChain && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const paths = packetChain.map((id) => document.getElementById("f-" + id));
+      const lens = paths.map((p) => p.getTotalLength());
+      const total = lens.reduce((a, b) => a + b, 0);
+      const speed = 220;   // 像素 / 秒
+      let d = ((ts - packetStart) / 1000 * speed) % total;
+      let k = 0;
+      while (d > lens[k]) { d -= lens[k]; k++; }
+      const pt = paths[k].getPointAtLength(d);
+      packet.setAttribute("cx", pt.x); packet.setAttribute("cy", pt.y);
+    } else {
+      packet.setAttribute("cx", -20); packet.setAttribute("cy", -20);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function go(i) {
+    cur = Math.max(0, Math.min(L.length - 1, i));
+    const s = L[cur];
+    ALL_NODES.forEach((id) => document.getElementById(id).classList.toggle("dim", !s.nodes.includes(id)));
+    ALL_FLOWS.forEach((id) => {
+      const on = s.flows.includes(id);
+      const f = document.getElementById("f-" + id), l = document.getElementById("l-" + id);
+      f.classList.toggle("on", on);
+      f.classList.toggle("dim", !on && cur !== 0);
+      l.classList.toggle("dim", !on && cur !== 0);
+    });
+    svg.classList.toggle("pins-on", !!s.pins);
+    document.querySelectorAll("#r-sil rect").forEach((r) => {
+      r.style.strokeWidth = s.highlightSil ? "3" : "";
+      r.style.stroke = s.highlightSil ? "var(--pin)" : "";
+    });
+    packetChain = s.packet || null; packetStart = performance.now();
+
+    stepsNav.querySelectorAll("button").forEach((b, k) => b.setAttribute("aria-current", String(k === cur)));
+    document.getElementById("lnum").textContent = cur === 0 ? "总览" : `第 ${cur} 课 / 共 ${L.length - 1} 课`;
+    document.getElementById("ltitle").textContent = s.t;
+    document.getElementById("lbody").innerHTML = s.b.map((x) => `<li>${x}</li>`).join("");
+    document.getElementById("lanalogy").textContent = s.a;
+    document.getElementById("cq").textContent = s.q;
+    const opts = document.getElementById("copts");
+    const exp = document.getElementById("cexp");
+    exp.textContent = "";
+    opts.innerHTML = "";
+    s.o.forEach((txt, k) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = `${k + 1}. ${txt}`;
+      b.addEventListener("click", () => {
+        opts.querySelectorAll("button").forEach((x, j) => { x.classList.remove("right", "wrong"); if (j === s.ans) x.classList.add("right"); });
+        if (k !== s.ans) b.classList.add("wrong");
+        exp.textContent = (k === s.ans ? "✓ " : "✗ 再想想：") + s.e;
+      });
+      opts.appendChild(b);
+    });
+    document.getElementById("prev").disabled = cur === 0;
+    document.getElementById("next").disabled = cur === L.length - 1;
+  }
+  document.getElementById("prev").addEventListener("click", () => go(cur - 1));
+  document.getElementById("next").addEventListener("click", () => go(cur + 1));
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("button, input")) return;
+    if (e.key === "ArrowRight") go(cur + 1);
+    if (e.key === "ArrowLeft") go(cur - 1);
+  });
+  go(0);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
