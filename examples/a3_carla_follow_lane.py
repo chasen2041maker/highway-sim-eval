@@ -1,14 +1,16 @@
 """A3：在 CARLA 里用 Pure Pursuit 沿车道中心线开（速度用 PID）。"""
 import math
 import time
+import sys
 import carla
 from ads.control import PID, to_pedals, pure_pursuit_steer, find_lookahead_point
+from evaluation.metrics import lateral_error_m
 from ads.vehicle import VehicleState
 from sim.carla_client import CarlaSim
 from sim.transforms import carla_to_ours, ours_to_carla
 
 TARGET_MPS = 6.0  # 目标车速：要过路口拐弯，开慢点
-LOOKAHEAD_M = 5.0  # 前视距离 Ld（对比过 2 / 5 / 10，6 m/s 时选 5）
+LOOKAHEAD_M = float(sys.argv[1]) if len(sys.argv) > 1 else 5.0  # 前视距离 Ld：命令行给，不给就用 5
 DURATION_S = 12.0
 
 with CarlaSim(dt_s=0.05) as sim:
@@ -28,6 +30,7 @@ with CarlaSim(dt_s=0.05) as sim:
         wp = wp.next(0.5)[0]
 
     pid = PID(kp=1.0, ki=0.5, u_max=1.0)
+    worst_m = 0.0  # 每秒打印的离红线距离里，最大的那个
     for i in range(round(DURATION_S / sim.dt_s)):
         # ② 把 CARLA 里车的状态换成我们的坐标，装进 A1 的 VehicleState
         tf = ego.get_transform()
@@ -58,6 +61,8 @@ with CarlaSim(dt_s=0.05) as sim:
         time.sleep(sim.dt_s)
 
         if i % 20 == 19:
-            off = min(math.hypot(px - x, py - y) for px, py in path)
+            off = lateral_error_m(path, x, y)
+            worst_m = max(worst_m, off)
             print(f"{(i + 1) * sim.dt_s:4.1f} 秒  车速 {state.speed_mps:4.2f}  "
                   f"前轮 {math.degrees(delta):6.2f}°  steer {steer:5.2f}  离红线 {off:.2f} m")
+    print(f"Ld {LOOKAHEAD_M} 米：每秒打印里离红线最大 {worst_m:.2f} m")
