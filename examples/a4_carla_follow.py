@@ -2,9 +2,10 @@
 和纯 Python 版 examples/a4_follow.py 同一个场景，最后比两边的数字。"""
 import math
 import time
+import sys
 import carla
 from ads.control import PID, to_pedals
-from ads.planning import idm_accel
+from ads.planning import StopHold, idm_accel
 from sim.carla_client import CarlaSim
 
 SPAWN_INDEX = 80          # 前面 178 米直路（tool_find_straight 找的）
@@ -16,6 +17,8 @@ BRAKE_AT_S = 5.0          # IDM 接手后第 5 秒，前车开始急刹
 LEAD_BRAKE_MPS2 = -5.0    # 前车每秒车速减 5，2 秒停下
 DURATION_S = 12.0         # IDM 接手后开 12 秒
 CLOSED_LOOP = True        # True：IDM → 影子车车速 → PID → 踏板；False：IDM 的数直接当踏板（前半段）
+USE_STOP_HOLD = "hold" in sys.argv   # 命令行后面带 hold 就开停车保持
+HOLD_BRAKE = 0.35                     # 停车保持时踩住的刹车踏板（0～1）
 
 def push(car, speed_mps):
     """剧本：不踩油门，直接把车速设成 speed_mps（沿车头方向）。只给前车和滚动起步用。"""
@@ -32,6 +35,8 @@ with CarlaSim(dt_s=0.05) as sim:
     lead_speed = START_MPS
     shadow = START_MPS             # 影子车的车速，从 10 开始
     pid = PID(kp=1.0, ki=0.5, u_max=1.0)        # 第 ① 步调好的参数
+    hold = StopHold()              # 停车保持（10-19 笔记本写的）
+    restarts, low = 0, False       # 停下后又起步几次；low = 刚才是不是停着
     min_gap, hardest, real_hardest, last_speed = 99.0, 0.0, 0.0, START_MPS
 
     for i in range(round((WARMUP_S + DURATION_S) / sim.dt_s)):
@@ -57,10 +62,17 @@ with CarlaSim(dt_s=0.05) as sim:
             else:
                 u = accel                   # 前半段：IDM 的数直接当踏板
             throttle, brake = to_pedals(u)
+            if USE_STOP_HOLD and hold.update(speed, speed_of(lead), gap):
+                pid.integral, pid.pre_error, shadow = 0.0, None, 0.0   # 攒的清掉，影子车也停
+                throttle, brake = 0.0, HOLD_BRAKE                      # 踩住刹车
 
             ego.apply_control(carla.VehicleControl(throttle=throttle,brake=brake))
             min_gap = min(min_gap, gap)
             hardest = min(hardest, accel)
+            if speed < 1.0:            # 记“停下后又起步”：车速掉到 1 以下算停，再过 1 算又起步
+                low = True
+            elif low:
+                restarts, low = restarts + 1, False
 
         if i % 10 == 0:           # 每 0.5 秒看一次
             real = (speed - last_speed) / 0.5      # 过去 0.5 秒，车速实际每秒变了多少
@@ -68,9 +80,10 @@ with CarlaSim(dt_s=0.05) as sim:
             if t >= 0:
                 real_hardest = min(real_hardest, real)
                 print(f"{t:4.1f} 秒  前车 {speed_of(lead):5.2f}  我 {speed:5.2f}  影子 {shadow:5.2f} 车距 {gap:5.2f}  "
-                      f"IDM 要 {accel:5.2f}  油门 {throttle:.2f}  刹车 {brake:.2f}  实际 {real:5.2f}")
+                      f"IDM 要 {accel:5.2f}  油门 {throttle:.2f}  刹车 {brake:.2f}  实际 {real:5.2f}  {'保持中' if hold.holding else ''}")
         sim.tick()
         sim.follow(ego)
         time.sleep(sim.dt_s)
     print(f"最小车距 {min_gap:.2f} 米，IDM 最猛要 {hardest:.2f}，实际最猛 {real_hardest:.2f} m/s²")
     print("撞了！" if min_gap <= 0 else "没撞")
+    print(f"停车保持{'开' if USE_STOP_HOLD else '关'}：停下后又起步 {restarts} 次，最后停在 {gap:.2f} 米")
