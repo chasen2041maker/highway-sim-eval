@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>仿真的五种考场</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 布局：标题 → 五个考场的选项卡（按便宜量大 → 贵量少排）→ 左边动画、右边说明 → 底部一圈“筛选 + 回传” */
+:root {
+  --bg: #f3f4f0; --panel: #ffffff; --ink: #1e2421; --muted: #66706a; --line: #d7dcd6;
+  --road: #c9cfc9; --lane: #ffffff; --ego: #2b6cb0; --car: #4a514d; --ghost: #9aa39d;
+  --good: #2f9e44; --bad: #e03131; --warn: #e8590c; --accent: #2b6cb0; --splat: #8a948e;
+  --font-ui: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111513; --panel: #191f1c; --ink: #e6ebe7; --muted: #94a09a; --line: #2e3833;
+    --road: #333c37; --lane: #8b958f; --ego: #6ea8fe; --car: #c3cbc6; --ghost: #6b756f;
+    --good: #51cf66; --bad: #ff6b6b; --warn: #ff922b; --accent: #6ea8fe; --splat: #7d8882; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111513; --panel: #191f1c; --ink: #e6ebe7; --muted: #94a09a; --line: #2e3833;
+  --road: #333c37; --lane: #8b958f; --ego: #6ea8fe; --car: #c3cbc6; --ghost: #6b756f;
+  --good: #51cf66; --bad: #ff6b6b; --warn: #ff922b; --accent: #6ea8fe; --splat: #7d8882; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); line-height: 1.55; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 20px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 14px; }
+h1 { font-size: 1.45rem; margin: 0; text-wrap: balance; }
+.lead { margin: 0; color: var(--muted); max-width: 72ch; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab { font: inherit; font-size: .92rem; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.tab b { font-family: var(--font-num); color: var(--muted); font-weight: 600; }
+.tab[aria-selected="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tab:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0;
+  display: grid; gap: 10px; align-content: start; }
+canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
+.status { font-size: .92rem; min-height: 2.8em; }
+.status .flag { color: var(--bad); font-weight: 600; }
+.status .ok { color: var(--good); font-weight: 600; }
+h2 { font-size: 1.1rem; margin: 0; }
+.one { margin: 0; }
+.meters { display: grid; gap: 4px; font-size: .86rem; }
+.meter { display: grid; grid-template-columns: 9.5em auto; gap: 8px; align-items: center; }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); display: inline-block; }
+.dots i.on { background: var(--accent); }
+.note { font-size: .82rem; color: var(--muted); margin: 0; }
+dl { margin: 0; display: grid; gap: 6px; font-size: .9rem; }
+dt { font-weight: 600; }
+dd { margin: 0 0 2px; color: var(--ink); }
+.plan { color: var(--accent); }
+.chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .88rem; }
+.chain span.box { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--bg); }
+.chain span.arrow { color: var(--muted); }
+.loop { font-size: .88rem; color: var(--muted); margin: 0; }
+.controls { display: flex; gap: 8px; align-items: center; }
+button { font: inherit; font-size: .88rem; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); cursor: pointer; }
+.clock { font-family: var(--font-num); font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>仿真的五种考场</h1>
+  <p class="lead">没有哪个仿真器是“完全的仿真”。公司里把好几种考场叠起来用：大批量的先在便宜的考场里筛，剩下的去贵的考场确认，真车上发现的新问题再送回前面。下面按“便宜、量大”到“贵、量少”排，点一个看它真在哪、假在哪。</p>
+
+  <div class="tabs" role="tablist" id="tabs"></div>
+
+  <div class="grid">
+    <section class="panel">
+      <canvas id="cv" width="760" height="330" aria-label="当前考场的示意动画"></canvas>
+      <div class="status" id="status"></div>
+      <div class="controls">
+        <button id="play">暂停</button>
+        <span class="clock" id="clock"></span>
+      </div>
+    </section>
+    <section class="panel">
+      <h2 id="name"></h2>
+      <p class="one" id="what"></p>
+      <div class="meters" id="meters"></div>
+      <p class="note">点数是示意，用来比大小，不是测量值。</p>
+      <dl>
+        <dt>真在哪</dt><dd id="real"></dd>
+        <dt>假在哪（盲区）</dt><dd id="fake"></dd>
+        <dt>适合考什么</dt><dd id="good"></dd>
+        <dt>招聘和工程里的叫法</dt><dd id="jd"></dd>
+        <dt>你的计划里对应</dt><dd id="plan" class="plan"></dd>
+      </dl>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="chain" id="chain"></div>
+    <p class="loop">↺ 影子模式和实车发现的新难例（急刹、接管、没见过的场景）会被回传，变成前面几种考场里的新考题。这一圈就是“数据闭环”。</p>
+  </section>
+</div>
+
+<script>
+const LAYERS = [
+  {
+    key: "engine", short: "引擎仿真",
+    name: "① 引擎仿真（CARLA、MetaDrive、HighwayEnv）",
+    what: "用游戏引擎和物理引擎按剧本造一个世界：路、车、行人、天气都由程序摆出来。",
+    meters: [2, 5, 5, 5, 5],
+    real: "几何和真值是精确的：每辆车在哪、多快都知道；危险场景想造多少造多少；能同时开很多个考场批量跑。",
+    fake: "画面像游戏，跟真摄像头不一样；传感器是简化的；路上其他车按规则开，不像真人会抢道、犹豫。",
+    good: "规划和控制、场景库、每次改代码后的大批量回归测试。",
+    jd: "场景库、OpenSCENARIO、批量仿真、仿真平台开发、回归测试。",
+    plan: "A 块（CARLA、HighwayEnv）、B1 场景库（加 OpenSCENARIO）、B2 批量调度。",
+    status: () => `<span class="ok">每辆车的真值（编号、车速）都有</span>，前车急刹的剧本想改几次改几次；底下是同一晚批量跑的一排考场。`
+  },
+  {
+    key: "replay", short: "日志回放",
+    name: "② 日志回放（回灌）",
+    what: "把真车录下来的传感器数据原样喂给模型，看它这一路的判断对不对。",
+    meters: [5, 1, 2, 4, 4],
+    real: "画面、雷达点、天气全是真的，一个像素都没造假。",
+    fake: "世界不会跟着你变：车一换开法（刹得更早、换了车道），录像里的其他车还照原样开，对不上了。",
+    good: "感知（框画得准不准）、开环对比、新版本有没有在老数据上变差。",
+    jd: "回灌、数据回放、logsim、开环评测。",
+    plan: "B3 录制回灌（MCAP）；A8 的“真值 vs 感知”也是同一种对比思路。",
+    status: (s) => s.overlap
+      ? `<span class="flag">后车照着录像往前开，穿过了你。</span>现实里它会跟着刹车；这不是你的车出错，是录像“不会反应”。`
+      : `蓝色是你的模型在开：它比录像里的人刹得早、刹得猛。灰色虚线是录像里那辆车当时的位置。`
+  },
+  {
+    key: "recon", short: "神经重建",
+    name: "③ 神经重建（NeRF、3DGS）",
+    what: "用真车录的数据把整条街重建成 3D，车可以换一种开法，再渲染出“如果当时这么开，摄像头会看到什么”。",
+    meters: [4, 4, 3, 3, 3],
+    real: "画面接近真实，又能闭环：换了开法，看到的画面也跟着变。",
+    fake: "离录像轨迹越远越糊、越容易出空洞；其他车和行人要单独建，它们怎么反应也要另外配。",
+    good: "端到端模型的闭环考试，用真实街景考“看图开车”。",
+    jd: "小鹏仿真岗：3DGS 渲染优化；零跑：用 3DGS / NeRF 打通端到端仿真闭环；小鹏：视觉重建 / 生成算法（闭环仿真）。",
+    plan: "现在先在“一页纸”里了解；阶段 3 做第二个作品时可以用真实数据试。",
+    status: (s) => `你的车换到了左边车道（录像里没去过）。离录像轨迹 <b>${s.off.toFixed(1)} 米</b>，画面清晰度 <b>${Math.round(s.q * 100)}%</b>${s.q < 0.6 ? `：<span class="flag">开始糊、出空洞</span>` : ""}。`
+  },
+  {
+    key: "world", short: "世界模型",
+    name: "④ 世界模型（生成式仿真）",
+    what: "训一个会“想象”的模型：给它当前画面和你的动作，它生成接下来的画面，一帧一帧往前编。",
+    meters: [4, 4, 1, 2, 3],
+    real: "能造出录像里从来没有的长尾场景（逆行、掉货、暴雨里的行人），也能当强化学习的训练场。",
+    fake: "会幻觉：车凭空出现或消失；没有标准答案，哪辆车在哪只能再用感知模型去猜；物理规律不一定对。",
+    good: "长尾场景、端到端 / VLA 的闭环评估，给模型在里面练。",
+    jd: "小鹏 X-World 世界模型当 VLA 的闭环评估引擎；“世界模型算法工程师”“视觉生成”。",
+    plan: "B7“世界模型当第二个考场”（OccWorld 优先，投递期做）。",
+    status: (s) => s.vanish
+      ? `<span class="flag">幻觉：左边车道那辆车凭空消失了。</span>没有真值，没人能直接告诉你这一帧是错的。`
+      : `每一帧都是模型“编”出来的，画面会轻微晃动；车上没有真值框。`
+  },
+  {
+    key: "real", short: "台架、实车、影子模式",
+    name: "⑤ 台架、实车和影子模式",
+    what: "真控制器接上台架跑（HIL），再上封闭场地、上路；影子模式在用户的车上让模型后台算，不碰方向盘。",
+    meters: [5, 5, 2, 1, 1],
+    real: "一切都是真的：真芯片、真传感器、真路、真人。",
+    fake: "贵、慢；危险场景不能故意去造；出了问题也很难原样重来一次。",
+    good: "上车前最后确认；发现前面几种考场里没有的真实新难例。",
+    jd: "小鹏：HIL 仿真链路调优；数据闭环：Trigger（急刹、接管、影子模式置信度异常）。",
+    plan: "C0 难例挖掘对应“把影子模式和实车的难例挑出来，送回前面的考场”。",
+    status: (s) => s.diverge
+      ? `<span class="flag">模型和司机不一样：</span>司机刹了，模型还想往前开。这一段被记成难例，回传。`
+      : `司机在开车（实线）；模型在后台算它会怎么开（虚线），不碰方向盘。`
+  }
+];
+const NAMES = ["像真实", "世界会跟着你变", "有真值", "便宜", "一天能跑的量"];
+
+const $ = (id) => document.getElementById(id);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function rgba(hex, a) {
+  const h = hex.replace("#", ""), n = parseInt(h.length === 3 ? h.split("").map(c => c + c).join("") : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+// ---------- 选项卡和说明 ----------
+let mode = 0;
+const tabs = $("tabs");
+LAYERS.forEach((L, i) => {
+  const b = document.createElement("button");
+  b.className = "tab"; b.setAttribute("role", "tab"); b.id = "tab-" + L.key;
+  b.innerHTML = `<b>${i + 1}</b>${L.short}`;
+  b.onclick = () => select(i);
+  tabs.appendChild(b);
+});
+const chain = $("chain");
+LAYERS.forEach((L, i) => {
+  if (i) chain.insertAdjacentHTML("beforeend", `<span class="arrow">→</span>`);
+  chain.insertAdjacentHTML("beforeend", `<span class="box">${i + 1} ${L.short}</span>`);
+});
+chain.insertAdjacentHTML("afterbegin", `<span class="arrow">便宜、量大</span>`);
+chain.insertAdjacentHTML("beforeend", `<span class="arrow">贵、量少</span>`);
+
+function select(i) {
+  mode = i; t0 = performance.now();
+  [...tabs.children].forEach((b, k) => b.setAttribute("aria-selected", k === i ? "true" : "false"));
+  const L = LAYERS[i];
+  $("name").textContent = L.name; $("what").textContent = L.what;
+  $("real").textContent = L.real; $("fake").textContent = L.fake; $("good").textContent = L.good;
+  $("jd").textContent = L.jd; $("plan").textContent = L.plan;
+  $("meters").innerHTML = NAMES.map((n, k) =>
+    `<div class="meter"><span>${n}</span><span class="dots">${[0, 1, 2, 3, 4].map(d => `<i class="${d < L.meters[k] ? "on" : ""}"></i>`).join("")}</span></div>`).join("");
+}
+
+// ---------- 动画 ----------
+const cv = $("cv"), ctx = cv.getContext("2d");
+const PERIOD = 7.0;
+let W = 760, H = 330, S = 8.5, CY = 125, EGO_PX = 170;
+// 画布按实际显示宽度画（手机上字不会被缩到看不清）
+function fit() {
+  const cssW = Math.round(cv.getBoundingClientRect().width) || 760;
+  W = Math.max(300, Math.min(760, cssW));
+  const narrow = W < 560;
+  H = narrow ? 220 : 250; S = narrow ? 6.5 : 10; CY = narrow ? 95 : 100; EGO_PX = narrow ? 60 : 140;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+const sx = (x, cam) => EGO_PX + (x - cam) * S;
+const sy = (y) => CY - y * S;
+// 先匀速，tb 秒起以 a 减速到停
+function kin(x0, v0, tb, a, t) {
+  if (t <= tb) return x0 + v0 * t;
+  const dt = t - tb, ts = -v0 / a;
+  const d = Math.min(dt, ts);
+  return x0 + v0 * tb + v0 * d + 0.5 * a * d * d;
+}
+function road(cam, opts = {}) {
+  ctx.fillStyle = css("--road");
+  ctx.fillRect(0, sy(5.25), W, 10.5 * S);
+  ctx.strokeStyle = css("--lane"); ctx.lineWidth = 2;
+  ctx.setLineDash([14, 12]); ctx.lineDashOffset = (cam * S) % 26;
+  [1.75, -1.75].forEach(y => { ctx.beginPath(); ctx.moveTo(0, sy(y)); ctx.lineTo(W, sy(y)); ctx.stroke(); });
+  ctx.setLineDash([]); ctx.lineWidth = 3;
+  [5.25, -5.25].forEach(y => { ctx.beginPath(); ctx.moveTo(0, sy(y)); ctx.lineTo(W, sy(y)); ctx.stroke(); });
+}
+function car(x, y, cam, color, o = {}) {
+  const L = 4.6, Wd = 1.9, px = sx(x, cam) - L * S / 2, py = sy(y) - Wd * S / 2;
+  ctx.save();
+  if (o.alpha !== undefined) ctx.globalAlpha = o.alpha;
+  if (o.dash) { ctx.setLineDash([5, 4]); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.strokeRect(px, py, L * S, Wd * S); }
+  else { ctx.fillStyle = color; ctx.fillRect(px, py, L * S, Wd * S); }
+  ctx.restore();
+  if (o.label) {
+    ctx.font = `600 11px ${css("--font-ui")}`;
+    const tw = ctx.measureText(o.label).width, lx = Math.max(2, Math.min(px, W - tw - 4));
+    const ly = o.below ? py + Wd * S + 15 : py - 6;
+    ctx.fillStyle = rgba(css("--panel"), 0.85); ctx.fillRect(lx - 3, ly - 11, tw + 6, 15);
+    ctx.fillStyle = css("--ink"); ctx.fillText(o.label, lx, ly);
+  }
+  if (o.box) { ctx.strokeStyle = css("--good"); ctx.lineWidth = 1.5; ctx.strokeRect(px - 3, py - 3, L * S + 6, Wd * S + 6); }
+}
+// 一行放不下就按字折行
+function caption(text, x, y, color) {
+  ctx.fillStyle = color || css("--muted"); ctx.font = `13px ${css("--font-ui")}`;
+  const maxW = W - x - 12; let line = "";
+  for (const ch of text) {
+    if (line && !"，。、：；）”".includes(ch) && ctx.measureText(line + ch).width > maxW) { ctx.fillText(line, x, y); y += 17; line = ch; }
+    else line += ch;
+  }
+  ctx.fillText(line, x, y);
+}
+
+// 神经重建用的“高斯点”：沿录像轨迹（中间车道）密、离得越远越稀越糊
+const SPLATS = (() => {
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const pts = [];
+  for (let x = -40; x < 200; x += 0.9) {
+    for (let k = 0; k < 7; k++) {
+      const y = (rnd() - 0.5) * 12;
+      const keep = Math.exp(-Math.abs(y) / 3.2);
+      if (rnd() < keep) pts.push([x + rnd() * 0.9, y, rnd()]);
+    }
+  }
+  return pts;
+})();
+
+function frame(t) {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, W, H);
+  const key = LAYERS[mode].key, s = {};
+  if (key === "engine") {
+    const ego = kin(0, 10, 3.0, -5, t), lead = kin(28, 10, 2.5, -5, t), left = 8 + 12 * t;
+    const cam = ego;
+    road(cam);
+    car(lead, 0, cam, css("--car"), { label: `ID 1 · ${Math.max(0, t < 2.5 ? 10 : 10 - 5 * (t - 2.5)).toFixed(1)} m/s`, box: true });
+    car(left, 3.5, cam, css("--car"), { label: "ID 2 · 12.0 m/s", box: true });
+    car(ego, 0, cam, css("--ego"), { label: "我" });
+    caption("真值框（绿色）：每辆车在哪、多快，模拟器全知道", 12, 22);
+    // 底部：同一晚批量跑的考场
+    const n = 48, done = Math.min(n, Math.floor((t / PERIOD) * n * 1.15));
+    const perRow = Math.floor((W - 24) / 15), rows = Math.ceil(n / perRow), top = H - 12 - rows * 15;
+    caption(`同一晚批量回归：${done} / ${n} 个场景跑完（示意）`, 12, top - 9);
+    for (let i = 0; i < n; i++) {
+      const fail = i === 17 || i === 33;
+      ctx.fillStyle = i < done ? (fail ? css("--bad") : css("--good")) : css("--line");
+      ctx.fillRect(12 + (i % perRow) * 15, top + Math.floor(i / perRow) * 15, 11, 11);
+    }
+  } else if (key === "replay") {
+    const rec = kin(0, 10, 3.0, -3, t), me = kin(0, 10, 2.6, -6, t), follow = rec - 12, lead = kin(30, 10, 2.5, -4, t);
+    const cam = me;
+    road(cam);
+    car(lead, 0, cam, css("--car"), { label: "前车（录像）" });
+    car(rec, 0, cam, css("--ghost"), { dash: true, label: "录像里的自车", below: true });
+    car(follow, 0, cam, css("--car"), { label: "后车（录像）", below: true });
+    s.overlap = (follow + 2.3) > (me - 2.3);
+    if (s.overlap) {
+      ctx.strokeStyle = css("--bad"); ctx.lineWidth = 3;
+      ctx.strokeRect(sx(follow, cam) - 2.3 * S - 4, sy(0) - 0.95 * S - 4, sx(me, cam) - sx(follow, cam) + 4.6 * S + 8, 1.9 * S + 8);
+    }
+    car(me, 0, cam, css("--ego"), { label: "我的模型" });
+    caption("录像里的东西只会照原样播放", 12, 22);
+  } else if (key === "recon") {
+    const me = 10 * t;
+    const ly = t < 2 ? 0 : t < 4 ? 3.5 * (1 - Math.cos(Math.PI * (t - 2) / 2)) / 2 : 3.5;
+    s.off = ly; s.q = Math.max(0.15, 1 - Math.pow(ly / 4.2, 1.6));
+    const cam = me;
+    ctx.fillStyle = css("--panel"); ctx.fillRect(0, 0, W, H);
+    // 高斯点组成的路面
+    SPLATS.forEach(([x, y, r]) => {
+      const px = sx(x, cam), py = sy(y);
+      if (px < -10 || px > W + 10) return;
+      const far = Math.abs(y) / 6;
+      ctx.fillStyle = rgba(css("--splat"), 0.55 - far * 0.35);
+      ctx.beginPath(); ctx.arc(px, py, 3 + far * 9 + r * 2, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.strokeStyle = rgba(css("--lane"), 0.8); ctx.lineWidth = 2; ctx.setLineDash([14, 12]); ctx.lineDashOffset = (cam * S) % 26;
+    ctx.beginPath(); ctx.moveTo(0, sy(1.75)); ctx.lineTo(W, sy(1.75)); ctx.stroke(); ctx.setLineDash([]);
+    // 录像轨迹
+    ctx.strokeStyle = css("--ghost"); ctx.setLineDash([3, 5]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, sy(0)); ctx.lineTo(W, sy(0)); ctx.stroke(); ctx.setLineDash([]);
+    caption("灰色点线 = 录像车当时走过的轨迹（中间车道）", 12, sy(-6) + 20);
+    car(30 + 9 * t, 0, cam, css("--car"), { label: "前车（重建出来的）" });
+    // 视野越糊，自车周围画一圈虚影
+    ctx.save(); ctx.globalAlpha = 1 - s.q;
+    for (let k = 0; k < 6; k++) { ctx.fillStyle = rgba(css("--splat"), 0.25); ctx.beginPath(); ctx.arc(sx(me + 6 + k * 3, cam), sy(ly + (k % 2 ? 1 : -1)), 10 + k * 2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+    car(me, ly, cam, css("--ego"), { label: "我的模型（换了车道）" });
+    caption("路面由一团团“高斯点”拼成：录像走过的地方密，没去过的地方稀", 12, 22);
+  } else if (key === "world") {
+    const me = kin(0, 10, 3.6, -3, t), lead = kin(30, 10, 3.0, -4, t), left = 12 + 11 * t;
+    const cam = me;
+    const j = () => (Math.sin(t * 37) + Math.sin(t * 23)) * 0.6;
+    if ("filter" in ctx) ctx.filter = "blur(0.7px)";
+    road(cam);
+    car(lead + j() * 0.3, j() * 0.08, cam, css("--car"));
+    s.vanish = t > 3.2 && t < 4.3;
+    if (!s.vanish) car(left + j() * 0.3, 3.5 + j() * 0.08, cam, css("--car"));
+    else { ctx.strokeStyle = css("--bad"); ctx.setLineDash([4, 4]); ctx.lineWidth = 2; ctx.strokeRect(sx(left, cam) - 2.3 * S, sy(3.5) - 0.95 * S, 4.6 * S, 1.9 * S); ctx.setLineDash([]); }
+    car(me, 0, cam, css("--ego"));
+    if ("filter" in ctx) ctx.filter = "none";
+    ctx.font = `600 11px ${css("--font-ui")}`; ctx.fillStyle = css("--ink");
+    ctx.fillText("我的模型", sx(me, cam) - 2.3 * S, sy(0) - 0.95 * S - 6);
+    caption(`模型生成第 ${Math.floor(t * 10) + 1} 帧（没有真值框）`, 12, 22);
+    if (s.vanish) caption("这里本来有车", sx(left, cam) - 30, sy(3.5) - 16, css("--bad"));
+  } else {
+    const human = kin(0, 10, 2.6, -4, t);
+    const model = kin(0, 10, 3.6, -4, t);
+    const lead = kin(32, 10, 2.0, -4, t);
+    s.diverge = model - human > 1.5;
+    const cam = human;
+    road(cam);
+    car(lead, 0, cam, css("--car"), { label: "前车" });
+    car(model, 0, cam, css("--warn"), { dash: true, label: "模型（影子，只在后台算）", below: true });
+    car(human, 0, cam, css("--ego"), { label: "司机在开" });
+    caption("台架（HIL）→ 封闭场地 → 实车 → 影子模式（用户的车上）", 12, 22);
+    if (s.diverge) {
+      const x0 = W - 210, y0 = H - 62;
+      ctx.fillStyle = rgba(css("--warn"), 0.15); ctx.fillRect(x0, y0, 196, 48);
+      ctx.strokeStyle = css("--warn"); ctx.lineWidth = 1.5; ctx.strokeRect(x0, y0, 196, 48);
+      caption("记一条难例：司机刹了、", x0 + 10, y0 + 20, css("--ink"));
+      caption("模型没刹 → 回传", x0 + 10, y0 + 38, css("--ink"));
+    }
+  }
+  $("status").innerHTML = LAYERS[mode].status(s);
+  $("clock").textContent = `${t.toFixed(1)} 秒`;
+}
+
+let t0 = performance.now(), playing = true, pausedAt = 0;
+function loop(now) {
+  if (playing) { const t = ((now - t0) / 1000) % PERIOD; pausedAt = t; frame(t); }
+  requestAnimationFrame(loop);
+}
+$("play").onclick = () => {
+  playing = !playing; $("play").textContent = playing ? "暂停" : "播放";
+  if (playing) t0 = performance.now() - pausedAt * 1000;
+};
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) { playing = false; $("play").textContent = "播放"; pausedAt = 5; }
+fit();
+new ResizeObserver(() => { fit(); frame(pausedAt); }).observe(cv);
+select(0);
+frame(pausedAt);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
