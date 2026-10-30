@@ -110,14 +110,16 @@ def score(log: dict, crashed: bool) -> dict:
     """最小车距、最猛刹车、最小 TTC（还有几秒撞上）、撞没撞。"""
     ttcs = [g / (ev - lv) for g, ev, lv in zip(log["gap"], log["ego_v"], log["lead_v"]) if ev - lv > 0.1]
     i = log["gap"].index(min(log["gap"]))
+    j = log["accel"].index(min(log["accel"]))
     return {"min_gap_m": log["gap"][i], "at_s": log["t"][i], "hardest_brake_mps2": min(log["accel"]),
+            "brake_at_s": log["t"][j],              # 新加：那一步是第几秒
             "min_ttc_s": min(ttcs) if ttcs else float("inf"), "crashed": crashed}
 
 
 def main():
     s = run(show="--show" in sys.argv)
     print(f"最小车距 {s['min_gap_m']:.2f} 米（第 {s['at_s']:.1f} 秒）")
-    print(f"我最猛的刹车 {s['hardest_brake_mps2']:.2f} m/s²")
+    print(f"我最猛的刹车 {s['hardest_brake_mps2']:.2f} m/s²（第 {s['brake_at_s']:.1f} 秒）")
     print(f"最小 TTC {s['min_ttc_s']:.2f} 秒")
     print("撞了！" if s["crashed"] else "没撞")
 
