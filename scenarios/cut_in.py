@@ -7,6 +7,7 @@
 
 四个数都是“它开始切进来那一刻”的，所以它第 0 秒就开始切（10-30 前车急刹的教训：参数定在关键事件那一刻）。
 cut_time_s = 0 表示它不切进来，一直在旁边车道开（“陪跑”题：用来考我会不会白刹车）。
+cut_depth_m 小于 2 表示它只往我这边靠、不跨进来（“靠线”题：考预测会不会误判）。
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ class CutIn:
     ego_speed_mps: float = 15.0     # 我的车速
     cut_speed_mps: float = 10.0     # 它的车速（比我慢才危险）
     cut_time_s: float = 2.0         # 它用几秒从旁边车道挪到我的车道；0 = 不切进来（陪跑）
+    cut_depth_m: float = 4.0        # 它往我这边挪多远：4 = 整条车道（切进来）；小于 2 = 只靠线、不进来
 
 
 # 逻辑场景：每个数能取的范围（B2 批量跑时在这里面取数）
@@ -35,6 +37,7 @@ RANGES = {
     "ego_speed_mps": (5.0, 30.0),
     "cut_speed_mps": (5.0, 30.0),
     "cut_time_s": (1.0, 5.0),
+    "cut_depth_m": (0.0, 4.0),
 }
 
 
@@ -71,9 +74,9 @@ def build(sc: CutIn, dt_s: float, sim_time_s: float, max_brake_mps2: float, show
     return env, cutter
 
 
-def cutter_y(sc: CutIn, t_s: float, y_side: float, y_mine: float) -> float:
-    """它在第 t_s 秒的横向位置：用 A7 的五次多项式 lane_change_d，cut_time_s 秒从旁边车道挪到我的车道。"""
+def cutter_lateral(sc: CutIn, t_s: float) -> tuple[float, float]:
+    """它在第 t_s 秒往我这边挪了多少米、横向速度多少（A7 的五次多项式 lane_change_d）。陪跑：(0, 0)。"""
     if sc.cut_time_s <= 0:
-        return y_side                     # 陪跑：一直在旁边车道
-    d, _, _, _ = lane_change_d(t_s, sc.cut_time_s, y_mine - y_side)
-    return y_side + d
+        return 0.0, 0.0
+    d, vd, _, _ = lane_change_d(t_s, sc.cut_time_s, sc.cut_depth_m)
+    return d, vd

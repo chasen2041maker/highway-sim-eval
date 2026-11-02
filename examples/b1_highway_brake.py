@@ -28,6 +28,7 @@ TARGET_SPEED_MPS = 15.0    # IDM 想开到的车速
 MAX_BRAKE_MPS2 = 8.0       # 我最猛能刹多少
 CAR_LENGTH_M = 5.0         # HighwayEnv 里每辆车都是 5 米长
 LANE_WIDTH_M = 4.0         # HighwayEnv 的车道宽 4 米
+CAR_WIDTH_M = 2.0          # HighwayEnv 的车宽 2 米
 
 # ---------- ② 考场：把 HighwayEnv 摆成这道题 ----------
 def make_brake_scenario(show: bool = False):
@@ -63,15 +64,25 @@ def make_brake_scenario(show: bool = False):
     return env, lead
 
 # ---------- ③ 考生：IDM 司机，只看 obs ----------
-def idm_driver(obs) -> float:
-    """obs 第 0 行是自车 [有车, x, y, vx, vy]（绝对值），后面几行是附近的车（相对自车，按远近排好）。返回想要的加速度。"""
+def idm_driver(obs, predict_s: float = 0.0) -> float:
+    """obs 第 0 行是自车 [有车, x, y, vx, vy]（绝对值），后面几行是附近的车（相对自车，按远近排好）。返回想要的加速度。
+
+    predict_s：预测几秒。0 = 不预测，只认已经在我车道上的车；大于 0 = 朝我车道挪过来、
+    照现在的横向速度 predict_s 秒内会跨进来的车，也提前当成前车。
+    """
     ego_speed = obs[0][3]
     lead = None
     for row in obs[1:]:
-        if row[0] == 1 and row[1] > 0 and abs(row[2]) < LANE_WIDTH_M / 2:     # 有车、在我前面、在我的车道
-            lead = row                 # 第一辆符合的就是最近的前车
+        if row[0] != 1 or row[1] <= 0:
+            continue
+        y, vy = row[2], row[4]
+        edge = abs(y) - CAR_WIDTH_M / 2                   # 它靠我这边的车身边，离我车道中心多远
+        in_my_lane = edge < LANE_WIDTH_M / 2
+        coming = y * vy < 0 and abs(vy) > 0.1 and (edge - LANE_WIDTH_M / 2) / abs(vy) < predict_s
+        if in_my_lane or coming:
+            lead = row
             break
-    if lead is None:                          # 我的车道前面没车：只按目标车速开
+    if lead is None:
         return idm_accel(ego_speed, ego_speed, 1e9, TARGET_SPEED_MPS)
     gap_m = lead[1] - CAR_LENGTH_M          # 相对 x 是中心差，减掉一个车长才是车距
     lead_speed = ego_speed + lead[3]        # 相对速度 + 我的车速 = 前车车速
