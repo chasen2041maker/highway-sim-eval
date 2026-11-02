@@ -23,6 +23,17 @@ BANK = [
     LeadBrake(gap_m=16, ego_speed_mps=20, lead_speed_mps=10, lead_decel_mps2=5),   # 5 我快 10，远 4 米
 ]
 
+MIN_GAP_OK_M = 2.0    # 最小车距低于这个算险过
+HARD_BRAKE_LIMIT_MPS2 = -6.0  # 最猛刹车比这个还猛（更负）算险过
+
+def judge(s: dict) -> str:
+    """撞了 = 不过；没撞，但离得太近或刹得太猛 = 险过；其余 = 过。"""
+    if s["crashed"]:
+        return "不过"
+    if s["min_gap_m"] < MIN_GAP_OK_M or s["hardest_brake_mps2"] <= HARD_BRAKE_LIMIT_MPS2:
+        return "险过"
+    return "过"
+
 
 def run(sc: LeadBrake, show: bool = False) -> dict:
     """考一道题：每 0.1 秒 看 → 想 → 动 → 世界走一步；前车第 0 秒起按题目刹车。"""
@@ -56,11 +67,11 @@ def main():
         n = int(sys.argv[sys.argv.index("--show") + 1])
         print(BANK[n - 1], run(BANK[n - 1], show=True))
         return
-    print("题  车距  我   前车  前车刹  |  撞了  最小车距  最猛刹车（第几秒）")
+    print("题  车距  我   前车  前车刹  |  撞了  最小车距  最猛刹车（第几秒）  判定")
     for n, sc in enumerate(BANK, start=1):
         s = run(sc)
         print(f"{n:<3} {sc.gap_m:>4.0f} {sc.ego_speed_mps:>4.0f} {sc.lead_speed_mps:>5.0f} {-sc.lead_decel_mps2:>6.0f}  |  "
-              f"{'是' if s['crashed'] else '否':<4} {s['min_gap_m']:>7.2f}   {s['hardest_brake_mps2']:>6.2f}（{s['brake_at_s']:.1f}）")
+              f"{'是' if s['crashed'] else '否':<4} {s['min_gap_m']:>7.2f}   {s['hardest_brake_mps2']:>6.2f}（{s['brake_at_s']:.1f}）  {judge(s)}")
 
 
 if __name__ == "__main__":
