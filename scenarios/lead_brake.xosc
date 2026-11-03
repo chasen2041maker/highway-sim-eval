@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  前车急刹，写成 OpenSCENARIO 1.0（和 scenarios/lead_brake.py 的 LeadBrake 是同一道题）。
+  ParameterDeclarations 里的 4 个数 = LeadBrake 的 4 个字段（逻辑场景的旋钮，填好就是具体场景）。
+  前车什么时候刹：不写死时间，而是“我离它不到 gap 米（车头到车尾）就刹”，
+  所以不管我之前怎么开，危险那一刻的车距都是 gap。
+  HighwayEnv 版（scenarios/xosc.py）直接从这一刻开考；CARLA 版（以后回家用 ScenarioRunner）
+  让前车从 leadStartDs 米外开过来，离到 gap 才刹。
+-->
+<OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="0" date="2026-11-03T00:00:00" description="highway-sim-eval: lead car brakes hard" author="chasen2041maker"/>
+  <ParameterDeclarations>
+    <ParameterDeclaration name="gap" parameterType="double" value="25.0"/>
+    <ParameterDeclaration name="egoSpeed" parameterType="double" value="10.0"/>
+    <ParameterDeclaration name="leadSpeed" parameterType="double" value="10.0"/>
+    <ParameterDeclaration name="leadDecel" parameterType="double" value="5.0"/>
+    <!-- 下面这个只给 CARLA 版用：前车开局离我多远（车中心到车中心），HighwayEnv 版不用 -->
+    <ParameterDeclaration name="leadStartDs" parameterType="double" value="50.0"/>
+  </ParameterDeclarations>
+  <CatalogLocations/>
+  <RoadNetwork>
+    <LogicFile filepath="Town04"/>
+    <SceneGraphFile filepath=""/>
+  </RoadNetwork>
+  <Entities>
+    <ScenarioObject name="hero">
+      <Vehicle name="vehicle.tesla.model3" vehicleCategory="car">
+        <ParameterDeclarations/>
+        <Performance maxSpeed="69.444" maxAcceleration="8.0" maxDeceleration="8.0"/>
+        <BoundingBox>
+          <Center x="1.5" y="0.0" z="0.9"/>
+          <Dimensions width="2.0" length="5.0" height="1.5"/>
+        </BoundingBox>
+        <Axles>
+          <FrontAxle maxSteering="0.5" wheelDiameter="0.6" trackWidth="1.8" positionX="3.1" positionZ="0.3"/>
+          <RearAxle maxSteering="0.0" wheelDiameter="0.6" trackWidth="1.8" positionX="0.0" positionZ="0.3"/>
+        </Axles>
+        <Properties>
+          <Property name="type" value="ego_vehicle"/>
+        </Properties>
+      </Vehicle>
+    </ScenarioObject>
+    <ScenarioObject name="adversary">
+      <Vehicle name="vehicle.tesla.model3" vehicleCategory="car">
+        <ParameterDeclarations/>
+        <Performance maxSpeed="69.444" maxAcceleration="8.0" maxDeceleration="8.0"/>
+        <BoundingBox>
+          <Center x="1.5" y="0.0" z="0.9"/>
+          <Dimensions width="2.0" length="5.0" height="1.5"/>
+        </BoundingBox>
+        <Axles>
+          <FrontAxle maxSteering="0.5" wheelDiameter="0.6" trackWidth="1.8" positionX="3.1" positionZ="0.3"/>
+          <RearAxle maxSteering="0.0" wheelDiameter="0.6" trackWidth="1.8" positionX="0.0" positionZ="0.3"/>
+        </Axles>
+        <Properties>
+          <Property name="type" value="simulation"/>
+        </Properties>
+      </Vehicle>
+    </ScenarioObject>
+  </Entities>
+  <Storyboard>
+    <Init>
+      <Actions>
+        <Private entityRef="hero">
+          <PrivateAction>
+            <TeleportAction>
+              <Position>
+                <!-- 回家在 CARLA 里按出生点改 -->
+                <WorldPosition x="0" y="0" z="0" h="0"/>
+              </Position>
+            </TeleportAction>
+          </PrivateAction>
+          <PrivateAction>
+            <LongitudinalAction>
+              <SpeedAction>
+                <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+                <SpeedActionTarget>
+                  <AbsoluteTargetSpeed value="$egoSpeed"/>
+                </SpeedActionTarget>
+              </SpeedAction>
+            </LongitudinalAction>
+          </PrivateAction>
+        </Private>
+        <Private entityRef="adversary">
+          <PrivateAction>
+            <TeleportAction>
+              <Position>
+                <RelativeRoadPosition entityRef="hero" ds="$leadStartDs" dt="0"/>
+              </Position>
+            </TeleportAction>
+          </PrivateAction>
+          <PrivateAction>
+            <LongitudinalAction>
+              <SpeedAction>
+                <SpeedActionDynamics dynamicsShape="step" value="0" dynamicsDimension="time"/>
+                <SpeedActionTarget>
+                  <AbsoluteTargetSpeed value="$leadSpeed"/>
+                </SpeedActionTarget>
+              </SpeedAction>
+            </LongitudinalAction>
+          </PrivateAction>
+        </Private>
+      </Actions>
+    </Init>
+    <Story name="LeadBrakeStory">
+      <Act name="LeadBrakeAct">
+        <ManeuverGroup name="LeadBrakeGroup" maximumExecutionCount="1">
+          <Actors selectTriggeringEntities="false">
+            <EntityRef entityRef="adversary"/>
+          </Actors>
+          <Maneuver name="LeadBrakeManeuver">
+            <Event name="LeadBrakes" priority="overwrite">
+              <Action name="LeadBrakes">
+                <PrivateAction>
+                  <LongitudinalAction>
+                    <SpeedAction>
+                      <!-- 匀减速（rate = 每秒减多少 m/s）刹到 0 -->
+                      <SpeedActionDynamics dynamicsShape="linear" value="$leadDecel" dynamicsDimension="rate"/>
+                      <SpeedActionTarget>
+                        <AbsoluteTargetSpeed value="0.0"/>
+                      </SpeedActionTarget>
+                    </SpeedAction>
+                  </LongitudinalAction>
+                </PrivateAction>
+              </Action>
+              <StartTrigger>
+                <ConditionGroup>
+                  <Condition name="EgoCloseEnough" delay="0" conditionEdge="rising">
+                    <ByEntityCondition>
+                      <TriggeringEntities triggeringEntitiesRule="any">
+                        <EntityRef entityRef="hero"/>
+                      </TriggeringEntities>
+                      <EntityCondition>
+                        <!-- 我离前车（车头到车尾）不到 gap 米 -->
+                        <RelativeDistanceCondition entityRef="adversary" relativeDistanceType="longitudinal" value="$gap" freespace="true" rule="lessThan"/>
+                      </EntityCondition>
+                    </ByEntityCondition>
+                  </Condition>
+                </ConditionGroup>
+              </StartTrigger>
+            </Event>
+          </Maneuver>
+        </ManeuverGroup>
+        <StartTrigger>
+          <ConditionGroup>
+            <Condition name="StartNow" delay="0" conditionEdge="none">
+              <ByValueCondition>
+                <SimulationTimeCondition value="0" rule="greaterThan"/>
+              </ByValueCondition>
+            </Condition>
+          </ConditionGroup>
+        </StartTrigger>
+      </Act>
+    </Story>
+    <StopTrigger>
+      <ConditionGroup>
+        <Condition name="TimeUp" delay="0" conditionEdge="rising">
+          <ByValueCondition>
+            <SimulationTimeCondition value="15" rule="greaterThan"/>
+          </ByValueCondition>
+        </Condition>
+      </ConditionGroup>
+    </StopTrigger>
+  </Storyboard>
+</OpenSCENARIO>
