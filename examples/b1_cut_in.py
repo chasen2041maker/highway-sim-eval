@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import sys
 from collections import deque
+import numpy as np
 
 from examples.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, idm_driver, score, to_action
 from examples.b1_scenarios import judge
@@ -30,13 +31,21 @@ BANK = [
 ]
 
 
-def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0) -> dict:
+def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0, noise_y_m: float = 0.0, seed: int = 0) -> dict:
     """考一道题：每 0.1 秒 看 → 想 → 动 → 世界走一步；它第 0 秒起按题目往我这边挪（带真的横向速度）。"""
     env, cutter = build(sc, DT_S, SIM_TIME_S, MAX_BRAKE_MPS2, show)
     world = env.unwrapped
     ego = world.vehicle
     y_side, y_mine = cutter.position[1], ego.position[1]
-    obs = world.observation_type.observe()
+    rng = np.random.default_rng(seed)
+
+    def sensor(o):
+        """故障注入：给考生看到的别的车的横向位置 y 加噪声（标准差 noise_y_m 米），模拟传感器不准。"""
+        o = np.array(o, dtype=float)
+        o[1:, 2] += rng.normal(0.0, noise_y_m, size=len(o) - 1) * (o[1:, 0] == 1)
+        return o
+
+    obs = sensor(world.observation_type.observe())
     late = deque([obs] * (round(delay_s / DT_S) + 1), maxlen=round(delay_s / DT_S) + 1)   # 排队：队头是几帧以前的路况
     log = {"t": [], "gap": [], "ego_v": [], "lead_v": [], "accel": []}
     crashed = False
@@ -56,7 +65,7 @@ def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 
             log["lead_v"].append(sc.cut_speed_mps)
             log["accel"].append(action[0] * MAX_BRAKE_MPS2)
             obs, reward, terminated, truncated, info = env.step(action)     # 考场
-            late.append(obs)                                                 # 新路况排到队尾，最旧的挤出去
+            late.append(sensor(obs))                                         # 新路况先过“传感器”，再排到队尾
             if info["crashed"]:
                 crashed = True
                 break
