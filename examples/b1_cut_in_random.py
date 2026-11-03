@@ -11,6 +11,7 @@
     python -m examples.b1_cut_in_random          不加延迟
     python -m examples.b1_cut_in_random 0.3      故障注入：考生看到的路况晚 0.3 秒
     python -m examples.b1_cut_in_random 0 0.2    故障注入：不加延迟，别的车的横向位置加 0.2 米噪声
+    python -m examples.b1_cut_in_random 0 0.2 3  再加防噪声：连续 3 帧都挑出前车才算数
 """
 
 from __future__ import annotations
@@ -43,31 +44,32 @@ def sample_cut_in(rng: random.Random, comes_in: bool) -> CutIn:
 
 def avoidable(sc: CutIn) -> bool:
     """一开始就把刹车踩死（-8）能不能躲开？躲不开的题，谁来考都撞，不算考生漏刹。"""
-    real = cut_in_exam.idm_driver
-    cut_in_exam.idm_driver = lambda obs, predict_s=0.0: -8.0
+    real = cut_in_exam.follow
+    cut_in_exam.follow = lambda obs, lead: -8.0          # 不管看到什么，一律踩死
     try:
         return not run(sc)["crashed"]
     finally:
-        cut_in_exam.idm_driver = real
+        cut_in_exam.follow = real
 
 
 def main():
     delay_s = float(sys.argv[1]) if len(sys.argv) > 1 else 0.0     # 故障注入：考生看到的路况晚几秒
     noise_y_m = float(sys.argv[2]) if len(sys.argv) > 2 else 0.0   # 故障注入：别的车横向位置的噪声（标准差，米）
+    confirm = int(sys.argv[3]) if len(sys.argv) > 3 else 1         # 防噪声：连续几帧都挑出前车才算数
     rng = random.Random(SEED)
     questions = [(sample_cut_in(rng, True), True) for _ in range(N_EACH)] + \
                 [(sample_cut_in(rng, False), False) for _ in range(N_EACH)]
     can_avoid = [avoidable(sc) if comes_in else True for sc, comes_in in questions]
     n_in = sum(1 for (_, ci), ok in zip(questions, can_avoid) if ci and ok)
     print(f"随机出了 {len(questions)} 道新题：会进来 {N_EACH} 道（其中踩死能躲开 {n_in} 道）、不进来 {N_EACH} 道。")
-    print(f"考生看到的路况晚 {delay_s:.1f} 秒，别的车横向位置噪声 {noise_y_m:.1f} 米。")
+    print(f"考生看到的路况晚 {delay_s:.1f} 秒，别的车横向位置噪声 {noise_y_m:.1f} 米，连续 {confirm} 帧确认。")
     print()
     print("预测几秒  |  漏刹（能躲开的却撞了）  误刹（不进来却刹了）")
     bad = {}
     for p in PREDICT_S:
         missed, false = [], []
         for n, ((sc, comes_in), ok) in enumerate(zip(questions, can_avoid), start=1):
-            s = run(sc, p, delay_s=delay_s, noise_y_m=noise_y_m, seed=n)     # 每道题的噪声种子固定，能复现
+            s = run(sc, p, delay_s=delay_s, noise_y_m=noise_y_m, seed=n, confirm_frames=confirm)   # 每道题的噪声种子固定，能复现
             if comes_in and ok and s["crashed"]:
                 missed.append(n)
             if not comes_in and s["hardest_brake_mps2"] < -0.5:

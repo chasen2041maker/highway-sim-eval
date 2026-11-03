@@ -7,6 +7,8 @@
 延迟只让它晚看到，不会让它看到不存在的东西。想把漏刹压回 1 道得把预测调到 1.0 秒，误刹 3 → 8。
 故障注入（11-02）：别的车横向位置加 0.2 米噪声（每道题种子 = 题号），误刹暴涨（预测 0 秒 0 → 9），漏刹不变：
 噪声会让在线外的车某一帧看起来已经压线。延迟害漏刹，噪声害误刹。
+防噪声（11-02）：连续 3 帧都挑出前车才算数。预测 0.5 秒：误刹 10 → 4，漏刹 1 → 2——确认对真进来的车也要等，
+等于自己加了 0.2 秒延迟；再把预测拉到 1.0 秒补回来：漏刹 1、误刹 6。
 """
 
 import random
@@ -35,16 +37,17 @@ def test_same_seed_same_questions():
     assert a[13][0].gap_m == 5.2 and a[13][0].cut_depth_m == 3.81
 
 
-@pytest.mark.parametrize("delay_s,noise_y_m,predict_s,missed,false", [
-    (0.0, 0.0, 0.0, [14, 15], []), (0.0, 0.0, 0.5, [14], [28, 31, 36]),
-    (0.3, 0.0, 0.0, [7, 14, 15], []), (0.3, 0.0, 0.5, [14, 15], [28, 31, 36]), (0.3, 0.0, 1.0, [14], [22, 24, 26, 28, 31, 36, 37, 38]),
-    (0.0, 0.2, 0.0, [14, 15], [21, 22, 23, 24, 26, 28, 31, 36, 38]),
+@pytest.mark.parametrize("delay_s,noise_y_m,confirm,predict_s,missed,false", [
+    (0.0, 0.0, 1, 0.0, [14, 15], []), (0.0, 0.0, 1, 0.5, [14], [28, 31, 36]),
+    (0.3, 0.0, 1, 0.0, [7, 14, 15], []), (0.3, 0.0, 1, 0.5, [14, 15], [28, 31, 36]), (0.3, 0.0, 1, 1.0, [14], [22, 24, 26, 28, 31, 36, 37, 38]),
+    (0.0, 0.2, 1, 0.0, [14, 15], [21, 22, 23, 24, 26, 28, 31, 36, 38]),
+    (0.0, 0.2, 3, 0.5, [14, 15], [26, 28, 31, 36]), (0.0, 0.2, 3, 1.0, [14], [22, 24, 26, 28, 31, 36]),
 ])
-def test_missed_and_false_brakes(delay_s, noise_y_m, predict_s, missed, false):
+def test_missed_and_false_brakes(delay_s, noise_y_m, confirm, predict_s, missed, false):
     qs = _questions()
     got_missed, got_false = [], []
     for n, (sc, comes_in) in enumerate(qs, start=1):
-        s = run(sc, predict_s, delay_s=delay_s, noise_y_m=noise_y_m, seed=n)
+        s = run(sc, predict_s, delay_s=delay_s, noise_y_m=noise_y_m, seed=n, confirm_frames=confirm)
         if comes_in and s["crashed"] and avoidable(sc):
             got_missed.append(n)
         if not comes_in and s["hardest_brake_mps2"] < -0.5:

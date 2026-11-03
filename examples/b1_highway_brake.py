@@ -64,29 +64,35 @@ def make_brake_scenario(show: bool = False):
     return env, lead
 
 # ---------- ③ 考生：IDM 司机，只看 obs ----------
-def idm_driver(obs, predict_s: float = 0.0) -> float:
-    """obs 第 0 行是自车 [有车, x, y, vx, vy]（绝对值），后面几行是附近的车（相对自车，按远近排好）。返回想要的加速度。
-
-    predict_s：预测几秒。0 = 不预测，只认已经在我车道上的车；大于 0 = 朝我车道挪过来、
-    照现在的横向速度 predict_s 秒内会跨进来的车，也提前当成前车。
-    """
-    ego_speed = obs[0][3]
-    lead = None
-    for row in obs[1:]:
-        if row[0] != 1 or row[1] <= 0:
+def pick_lead(obs, predict_s: float = 0.0):
+    """① 挑前车（看左右）：从近到远找第一辆“车身边已经压过我的车道线，或者照现在的横向速度
+    predict_s 秒内会压线”的车，返回 obs 里那一行；没有就返回 None。"""
+    for row in obs[1:]:                                   # 从近到远，一辆一辆看
+        if row[0] != 1 or row[1] <= 0:                    # 没车，或者在我后面
             continue
         y, vy = row[2], row[4]
         edge = abs(y) - CAR_WIDTH_M / 2                   # 它靠我这边的车身边，离我车道中心多远
         in_my_lane = edge < LANE_WIDTH_M / 2
         coming = y * vy < 0 and abs(vy) > 0.1 and (edge - LANE_WIDTH_M / 2) / abs(vy) < predict_s
-        if in_my_lane or coming:
-            lead = row
-            break
-    if lead is None:
+        if in_my_lane or coming:                          # 已经在我车道上，或者马上要进来
+            return row                                    # 第一辆符合的就是最近的前车
+    return None
+
+
+def follow(obs, lead) -> float:
+    """② 算刹车（看前后，IDM）：把 lead 当成就在正前方，用现在的前后车距和速度差算加速度；lead 是 None 就照常开。"""
+    ego_speed = obs[0][3]
+    if lead is None:                                      # 我的车道前面没车：只按目标车速开
         return idm_accel(ego_speed, ego_speed, 1e9, TARGET_SPEED_MPS)
     gap_m = lead[1] - CAR_LENGTH_M          # 相对 x 是中心差，减掉一个车长才是车距
     lead_speed = ego_speed + lead[3]        # 相对速度 + 我的车速 = 前车车速
     return idm_accel(ego_speed, lead_speed, gap_m, TARGET_SPEED_MPS)
+
+
+def idm_driver(obs, predict_s: float = 0.0) -> float:
+    """考生：obs 第 0 行是自车 [有车, x, y, vx, vy]（绝对值），后面几行是附近的车（相对自车，按远近排好）。
+    = ① 挑前车 + ② 算刹车。predict_s：预测几秒（0 = 不预测）。"""
+    return follow(obs, pick_lead(obs, predict_s))
 
 def to_action(accel: float, speed: float) -> list[float]:
     """加速度 → HighwayEnv 的动作（-1~1）。刹到 0 就不再往下刹：HighwayEnv 的车会倒着开。"""
