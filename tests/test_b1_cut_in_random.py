@@ -3,6 +3,8 @@
 数字来自 2026-11-02 实跑（笔记本 Windows 和云端 Linux 一样）。题库五道题上“预测 0.5 秒”全对，
 换成没见过的新题：漏刹 1 道（第 14 题：离得近、开头挪得慢，预测再长也晚）、误刹 3 道（第 28、31、36 题：
 冲着线过来、最后停在离线 0.1–0.3 米处，匀速往外推的预测以为它会进来）。
+故障注入（11-02）：考生看到的路况晚 0.3 秒，漏刹变多（预测 0 秒 2 → 3，0.5 秒 1 → 2），误刹一道不多：
+延迟只让它晚看到，不会让它看到不存在的东西。想把漏刹压回 1 道得把预测调到 1.0 秒，误刹 3 → 8。
 """
 
 import random
@@ -31,12 +33,15 @@ def test_same_seed_same_questions():
     assert a[13][0].gap_m == 5.2 and a[13][0].cut_depth_m == 3.81
 
 
-@pytest.mark.parametrize("predict_s,missed,false", [(0.0, [14, 15], []), (0.5, [14], [28, 31, 36])])
-def test_missed_and_false_brakes(predict_s, missed, false):
+@pytest.mark.parametrize("delay_s,predict_s,missed,false", [
+    (0.0, 0.0, [14, 15], []), (0.0, 0.5, [14], [28, 31, 36]),
+    (0.3, 0.0, [7, 14, 15], []), (0.3, 0.5, [14, 15], [28, 31, 36]), (0.3, 1.0, [14], [22, 24, 26, 28, 31, 36, 37, 38]),
+])
+def test_missed_and_false_brakes(delay_s, predict_s, missed, false):
     qs = _questions()
     got_missed, got_false = [], []
     for n, (sc, comes_in) in enumerate(qs, start=1):
-        s = run(sc, predict_s)
+        s = run(sc, predict_s, delay_s=delay_s)
         if comes_in and s["crashed"] and avoidable(sc):
             got_missed.append(n)
         if not comes_in and s["hardest_brake_mps2"] < -0.5:

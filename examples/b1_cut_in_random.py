@@ -8,12 +8,14 @@
 随机数种子固定（SEED），每次跑出来的题都一样，结果能复现。
 
 运行（在项目根目录，要 1–2 分钟）：
-    python -m examples.b1_cut_in_random
+    python -m examples.b1_cut_in_random          不加延迟
+    python -m examples.b1_cut_in_random 0.3      故障注入：考生看到的路况晚 0.3 秒
 """
 
 from __future__ import annotations
 
 import random
+import sys
 
 import numpy as np
 
@@ -49,19 +51,21 @@ def avoidable(sc: CutIn) -> bool:
 
 
 def main():
+    delay_s = float(sys.argv[1]) if len(sys.argv) > 1 else 0.0     # 故障注入：考生看到的路况晚几秒
     rng = random.Random(SEED)
     questions = [(sample_cut_in(rng, True), True) for _ in range(N_EACH)] + \
                 [(sample_cut_in(rng, False), False) for _ in range(N_EACH)]
     can_avoid = [avoidable(sc) if comes_in else True for sc, comes_in in questions]
     n_in = sum(1 for (_, ci), ok in zip(questions, can_avoid) if ci and ok)
     print(f"随机出了 {len(questions)} 道新题：会进来 {N_EACH} 道（其中踩死能躲开 {n_in} 道）、不进来 {N_EACH} 道。")
+    print(f"考生看到的路况晚 {delay_s:.1f} 秒。")
     print()
     print("预测几秒  |  漏刹（能躲开的却撞了）  误刹（不进来却刹了）")
     bad = {}
     for p in PREDICT_S:
         missed, false = [], []
         for n, ((sc, comes_in), ok) in enumerate(zip(questions, can_avoid), start=1):
-            s = run(sc, p)
+            s = run(sc, p, delay_s=delay_s)
             if comes_in and ok and s["crashed"]:
                 missed.append(n)
             if not comes_in and s["hardest_brake_mps2"] < -0.5:
