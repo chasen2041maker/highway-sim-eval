@@ -64,3 +64,13 @@ def test_prediction_threshold():
     free = idm_driver([EGO, EMPTY, EMPTY, EMPTY, EMPTY])
     assert idm_driver([EGO, coming, EMPTY, EMPTY, EMPTY], predict_s=0.4) == pytest.approx(free)
     assert idm_driver([EGO, coming, EMPTY, EMPTY, EMPTY], predict_s=0.6) < free - 1.0
+
+
+def test_will_cross_constant_acceleration():
+    """11-03：匀加速外推。第 14 题第 0.2 秒：离线 0.98 米、朝我 0.25 m/s、加速度 1.8。"""
+    from examples.b1_highway_brake import will_cross
+    assert not will_cross(0.98, 0.25, 0.0, 1.0)        # 只看速度：1 秒挪 0.25 米，到不了
+    assert will_cross(0.98, 0.25, 1.8, 1.0)            # 算上加速度：0.25 + ½·1.8 = 1.15 米，够到线
+    assert will_cross(0.2, 1.0, -2.0, 1.5)             # 在减速：0.5 秒后横向停下，最多挪 0.25 米
+    assert not will_cross(0.3, 1.0, -2.0, 1.5)         # （不截到停下那一刻的话，1.5 秒会算成往回挪 0.75 米）
+    assert not will_cross(0.1, 0.0, -1.0, 1.0)         # 已经不朝我挪、还在往回减：不会压线

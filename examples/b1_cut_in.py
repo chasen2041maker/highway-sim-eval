@@ -31,7 +31,7 @@ BANK = [
 ]
 
 
-def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0, noise_y_m: float = 0.0, seed: int = 0, confirm_frames: int = 1) -> dict:
+def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0, noise_y_m: float = 0.0, seed: int = 0, confirm_frames: int = 1, accel: bool = False) -> dict:
     """考一道题：每 0.1 秒 看 → 想 → 动 → 世界走一步；它第 0 秒起按题目往我这边挪（带真的横向速度）。"""
     env, cutter = build(sc, DT_S, SIM_TIME_S, MAX_BRAKE_MPS2, show)
     world = env.unwrapped
@@ -50,10 +50,12 @@ def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 
     log = {"t": [], "gap": [], "ego_v": [], "lead_v": [], "accel": []}
     crashed = False
     streak = 0                                                        # 连着几帧挑出了前车
+    prev = None                                                       # 上一帧（算横向加速度用）
     try:
         for k in range(round(SIM_TIME_S / DT_S)):
             t_s = k * DT_S
-            lead = pick_lead(late[0], predict_s)                               # ① 挑前车（看队头那帧）
+            lead = pick_lead(late[0], predict_s, prev if accel else None)    # ① 挑前车（看队头那帧）
+            prev = late[0]
             streak = streak + 1 if lead is not None else 0                     # 挑出来了就 +1，没挑出来就清零
             if streak < confirm_frames:                                        # 防噪声：没连续够几帧，就当没看见
                 lead = None

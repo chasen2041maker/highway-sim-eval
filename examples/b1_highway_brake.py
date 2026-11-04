@@ -64,16 +64,29 @@ def make_brake_scenario(show: bool = False):
     return env, lead
 
 # ---------- ③ 考生：IDM 司机，只看 obs ----------
-def pick_lead(obs, predict_s: float = 0.0):
-    """① 挑前车（看左右）：从近到远找第一辆“车身边已经压过我的车道线，或者照现在的横向速度
-    predict_s 秒内会压线”的车，返回 obs 里那一行；没有就返回 None。"""
-    for row in obs[1:]:                                   # 从近到远，一辆一辆看
+def will_cross(line_gap: float, v: float, a: float, horizon_s: float) -> bool:
+    """照现在朝我挪的横向速度 v、横向加速度 a（都是“朝我”为正），horizon_s 秒内车身边会不会压线。
+    s = v·t + ½·a·t²（匀加速）。a < 0（在减速）时最多算到它横向停下那一刻。"""
+    if a < 0:                                             # 在减速：最多算到它横着停下那一刻
+        horizon_s = min(horizon_s, v / -a) if v > 0 else 0.0
+    return v * horizon_s + 0.5 * a * horizon_s ** 2 >= line_gap
+
+def pick_lead(obs, predict_s: float = 0.0, prev=None):
+    """① 挑前车（看左右）：从近到远找第一辆“车身边已经压过我的车道线，或者 predict_s 秒内会压线”的车，返回 obs 里那一行；没有就返回 None。
+    prev = 上一帧的 obs：给了就用两帧的横向速度差算加速度（匀加速外推），没给就照现在的横向速度匀速外推。"""
+    for i, row in enumerate(obs[1:], start=1):            # 从近到远，一辆一辆看
         if row[0] != 1 or row[1] <= 0:                    # 没车，或者在我后面
             continue
         y, vy = row[2], row[4]
         edge = abs(y) - CAR_WIDTH_M / 2                   # 它靠我这边的车身边，离我车道中心多远
         in_my_lane = edge < LANE_WIDTH_M / 2
-        coming = y * vy < 0 and abs(vy) > 0.1 and (edge - LANE_WIDTH_M / 2) / abs(vy) < predict_s
+        if prev is None or prev[i][0] != 1:
+            coming = y * vy < 0 and abs(vy) > 0.1 and (edge - LANE_WIDTH_M / 2) / abs(vy) < predict_s
+        else:                                             # 只有一辆别的车时行号对得上；多辆车要用 A6 的跟踪器按编号对
+            toward = -vy if y > 0 else vy                 # 朝我挪的横向速度（正 = 朝我）
+            toward_prev = -prev[i][4] if y > 0 else prev[i][4]
+            accel = (toward - toward_prev) / DT_S
+            coming = toward > 0 and will_cross(edge - LANE_WIDTH_M / 2, toward, accel, predict_s)
         if in_my_lane or coming:                          # 已经在我车道上，或者马上要进来
             return row                                    # 第一辆符合的就是最近的前车
     return None

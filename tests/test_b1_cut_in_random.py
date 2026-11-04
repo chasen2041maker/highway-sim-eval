@@ -9,6 +9,9 @@
 噪声会让在线外的车某一帧看起来已经压线。延迟害漏刹，噪声害误刹。
 防噪声（11-02）：连续 3 帧都挑出前车才算数。预测 0.5 秒：误刹 10 → 4，漏刹 1 → 2——确认对真进来的车也要等，
 等于自己加了 0.2 秒延迟；再把预测拉到 1.0 秒补回来：漏刹 1、误刹 6。
+匀加速预测（11-03）：两帧横向速度相减算加速度，按 s = v·T + ½·a·T² 往外推（减速时只算到横向停下）。
+0.5 秒：误刹 3 → 1（快到线时在减速的车，算上减速度就知道它会停）；1.0 秒：漏刹 1 → 0（第 14 题第 0.3 秒开刹、几乎贴上），误刹 8 → 6；
+1.5 秒：误刹 10 → 14（变道前半段都在加速，推 1.5 秒推过头）。
 """
 
 import random
@@ -48,6 +51,22 @@ def test_missed_and_false_brakes(delay_s, noise_y_m, confirm, predict_s, missed,
     got_missed, got_false = [], []
     for n, (sc, comes_in) in enumerate(qs, start=1):
         s = run(sc, predict_s, delay_s=delay_s, noise_y_m=noise_y_m, seed=n, confirm_frames=confirm)
+        if comes_in and s["crashed"] and avoidable(sc):
+            got_missed.append(n)
+        if not comes_in and s["hardest_brake_mps2"] < -0.5:
+            got_false.append(n)
+    assert got_missed == missed
+    assert got_false == false
+
+
+@pytest.mark.parametrize("predict_s,missed,false", [
+    (0.5, [14], [36]), (1.0, [], [26, 28, 31, 34, 36, 38]),
+    (1.5, [], [21, 22, 24, 25, 26, 28, 30, 31, 33, 34, 35, 36, 37, 38]),
+])
+def test_constant_acceleration_prediction(predict_s, missed, false):
+    got_missed, got_false = [], []
+    for n, (sc, comes_in) in enumerate(_questions(), start=1):
+        s = run(sc, predict_s, accel=True)
         if comes_in and s["crashed"] and avoidable(sc):
             got_missed.append(n)
         if not comes_in and s["hardest_brake_mps2"] < -0.5:
