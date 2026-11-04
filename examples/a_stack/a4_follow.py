@@ -5,7 +5,7 @@
   - 我最猛踩了多大的刹车
   - 撞没撞
 
-运行（在项目根目录）：python -m examples.a4_follow
+运行（在项目根目录）：python -m examples.a_stack.a4_follow
 """
 
 from pathlib import Path

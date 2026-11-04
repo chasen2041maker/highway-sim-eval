@@ -1,15 +1,15 @@
 """A5 搬进 CARLA（回家待办 ④）：用 CARLA 真的激光雷达扫一圈，跑 A5 的去地面 → DBSCAN → 框，再和真值对答案。
 
-和纯 Python 版 examples/a5_eval.py 同一套流程，不同的是：
+和纯 Python 版 examples/a_stack/a5_eval.py 同一套流程，不同的是：
   点云来自 CARLA 的 sensor.lidar.ray_cast（32 线、50 米、装在车顶 1.8 米高），
   场景是 CARLA 地图里真的路：我的车 + 同车道前车 + 旁边车道一辆 + 后车 + 人行道上一个人（放得下才放），
   路边还有树、路灯杆、房子——这些不在真值表里。
 CARLA 是左手系：雷达给的点 x 前、y 右、z 上；我们的 ads/perception.py 用 x 前、y 左、z 上，所以 y 要变号。
 
 运行（在项目根目录，CARLA 要开着）：
-    python -m examples.a5_carla_lidar            # y 变号（对的做法）
-    python -m examples.a5_carla_lidar noflip     # 故意不变号，看会怎样
-    python -m examples.a5_carla_lidar show       # 再在 CARLA 窗口里一步一步画出来（扫一圈 → 去地面 → 分堆 → 框），约 20 秒
+    python -m examples.a_stack.a5_carla_lidar            # y 变号（对的做法）
+    python -m examples.a_stack.a5_carla_lidar noflip     # 故意不变号，看会怎样
+    python -m examples.a_stack.a5_carla_lidar show       # 再在 CARLA 窗口里一步一步画出来（扫一圈 → 去地面 → 分堆 → 框），约 20 秒
 俯视图存到 outputs/a5_carla_lidar.png（noflip 存到 outputs/a5_carla_lidar_noflip.png）。
 """
 

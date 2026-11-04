@@ -1,6 +1,6 @@
 """A1：方向盘固定打一个角度，绕一圈，检查自行车模型。
 
-运行（在项目根目录）：python -m examples.l1_circle
+运行（在项目根目录）：python -m examples.a_stack.l1_circle
 """
 
 import math

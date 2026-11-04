@@ -8,7 +8,7 @@
         DBSCAN 分出几堆、门槛 2 米时的召回率 / 精确率。
 真值 labels 只在这里拿来打分，去地面、聚类本身看不到它。
 
-运行（在项目根目录）：python -m examples.a5_slope
+运行（在项目根目录）：python -m examples.a_stack.a5_slope
 """
 
 import numpy as np

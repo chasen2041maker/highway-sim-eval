@@ -4,7 +4,7 @@
       → 框的中心 = 检测结果 pred_xy，场景表里的真中心 = 真值 true_xy → evaluation.metrics.detection_metrics 打分。
 注意：真值只在打分时用，检测算法（ads/perception.py）从头到尾没看过它。
 
-运行（在项目根目录）：python -m examples.a5_eval
+运行（在项目根目录）：python -m examples.a_stack.a5_eval
 """
 
 import numpy as np

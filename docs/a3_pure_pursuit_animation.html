@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<!-- A3 Pure Pursuit 动画讲解：双击用浏览器打开。数字和 examples/a3_pure_pursuit.py 算出来的一样。 -->
+<!-- A3 Pure Pursuit 动画讲解：双击用浏览器打开。数字和 examples/a_stack/a3_pure_pursuit.py 算出来的一样。 -->
 <title>前视距离试驾场</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -207,7 +207,7 @@ h2 { margin: 6px 0 0; font-size: 19px; font-weight: 800; text-wrap: balance; }
         <tbody id="finalRows"></tbody>
       </table>
     </div>
-    <p class="note">和你在终端里跑 <code>python -m examples.a3_pure_pursuit</code> 打印的数字一样：这一页用同样的公式、同样的设定重算了一遍。</p>
+    <p class="note">和你在终端里跑 <code>python -m examples.a_stack.a3_pure_pursuit</code> 打印的数字一样：这一页用同样的公式、同样的设定重算了一遍。</p>
   </section>
 
   <section>
@@ -226,7 +226,7 @@ h2 { margin: 6px 0 0; font-size: 19px; font-weight: 800; text-wrap: balance; }
 </div>
 
 <script>
-// ===== SIM CORE START (same math as ads/vehicle.py + ads/control.py + examples/a3_pure_pursuit.py) =====
+// ===== SIM CORE START (same math as ads/vehicle.py + ads/control.py + examples/a_stack/a3_pure_pursuit.py) =====
 const WHEELBASE_M = 2.8;
 const MAX_STEER_RAD = 35 * Math.PI / 180;
 const DT_S = 0.1, SIM_TIME_S = 10, SPEED_MPS = 10, START_Y_M = -3;

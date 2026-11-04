@@ -3,15 +3,15 @@
 题目是数据（scenarios/lead_brake.py 的 LeadBrake），跑题的代码不动：出新题只要往 BANK 里加一行。
 
 运行（在项目根目录）：
-    python -m examples.b1_scenarios           跑全部题，打印成绩表
-    python -m examples.b1_scenarios --show 3  开窗口看第 3 题
+    python -m examples.b_eval.b1_scenarios           跑全部题，打印成绩表
+    python -m examples.b_eval.b1_scenarios --show 3  开窗口看第 3 题
 """
 
 from __future__ import annotations
 
 import sys
 
-from examples.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, idm_driver, score, to_action
+from examples.b_eval.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, idm_driver, score, to_action
 from scenarios.lead_brake import CAR_LENGTH_M, LeadBrake, build
 
 # ---------- 题库 ----------

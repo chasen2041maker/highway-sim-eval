@@ -5,7 +5,7 @@
        再拿真值对一下：每个真东西的点被分进了几堆（1 = 正好；>1 = 被切碎；两个东西进了同一堆 = 粘在一起）。
 会画图：outputs/a5_cluster.png（从天上看，每堆一个颜色，黑叉 = 噪声，虚线框 = 真东西的位置）。
 
-运行（在项目根目录）：python -m examples.a5_cluster
+运行（在项目根目录）：python -m examples.a_stack.a5_cluster
 """
 
 from pathlib import Path

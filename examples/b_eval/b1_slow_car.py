@@ -3,16 +3,16 @@
 成绩表除了判定，还多两列：15 秒里平均开多快、比没有慢车时少走了多少米（通行效率）。
 
 运行（在项目根目录）：
-    python -m examples.b1_slow_car
-    python -m examples.b1_slow_car --show 3   开窗口看第 3 题
+    python -m examples.b_eval.b1_slow_car
+    python -m examples.b_eval.b1_slow_car --show 3   开窗口看第 3 题
 """
 
 from __future__ import annotations
 
 import sys
 
-from examples.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, TARGET_SPEED_MPS, idm_driver, score, to_action
-from examples.b1_scenarios import judge
+from examples.b_eval.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, TARGET_SPEED_MPS, idm_driver, score, to_action
+from examples.b_eval.b1_scenarios import judge
 from scenarios.slow_car import CAR_LENGTH_M, SlowCar, build, is_valid
 
 BANK = [

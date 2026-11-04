@@ -22,8 +22,8 @@ pytest.importorskip("highway_env")
 
 import numpy as np  # noqa: E402
 
-from examples.b1_cut_in import run  # noqa: E402
-from examples.b1_cut_in_random import N_EACH, SEED, avoidable, sample_cut_in  # noqa: E402
+from examples.b_eval.b1_cut_in import run  # noqa: E402
+from examples.b_eval.b1_cut_in_random import N_EACH, SEED, avoidable, sample_cut_in  # noqa: E402
 
 np.seterr(divide="ignore")
 

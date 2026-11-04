@@ -1,5 +1,5 @@
 """A4 进 CARLA：前车按剧本开（10 m/s，第 5 秒以 -5 急刹到停），我用 IDM 跟在后面。
-和纯 Python 版 examples/a4_follow.py 同一个场景，最后比两边的数字。"""
+和纯 Python 版 examples/a_stack/a4_follow.py 同一个场景，最后比两边的数字。"""
 import math
 import time
 import sys

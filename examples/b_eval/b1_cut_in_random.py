@@ -8,11 +8,11 @@
 随机数种子固定（SEED），每次跑出来的题都一样，结果能复现。
 
 运行（在项目根目录，要 1–2 分钟）：
-    python -m examples.b1_cut_in_random          不加延迟
-    python -m examples.b1_cut_in_random 0.3      故障注入：考生看到的路况晚 0.3 秒
-    python -m examples.b1_cut_in_random 0 0.2    故障注入：不加延迟，别的车的横向位置加 0.2 米噪声
-    python -m examples.b1_cut_in_random 0 0.2 3  再加防噪声：连续 3 帧都挑出前车才算数
-    python -m examples.b1_cut_in_random 0 0 1 1  预测算上横向加速度（匀加速外推），不加故障
+    python -m examples.b_eval.b1_cut_in_random          不加延迟
+    python -m examples.b_eval.b1_cut_in_random 0.3      故障注入：考生看到的路况晚 0.3 秒
+    python -m examples.b_eval.b1_cut_in_random 0 0.2    故障注入：不加延迟，别的车的横向位置加 0.2 米噪声
+    python -m examples.b_eval.b1_cut_in_random 0 0.2 3  再加防噪声：连续 3 帧都挑出前车才算数
+    python -m examples.b_eval.b1_cut_in_random 0 0 1 1  预测算上横向加速度（匀加速外推），不加故障
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ import sys
 
 import numpy as np
 
-import examples.b1_cut_in as cut_in_exam
-from examples.b1_cut_in import PREDICT_S, run
+import examples.b_eval.b1_cut_in as cut_in_exam
+from examples.b_eval.b1_cut_in import PREDICT_S, run
 from scenarios.cut_in import CutIn
 
 SEED = 0

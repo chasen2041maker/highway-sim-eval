@@ -22,8 +22,8 @@ def test_is_valid():
 
 highway_env = pytest.importorskip("highway_env")
 
-from examples.b1_scenarios import judge  # noqa: E402
-from examples.b1_slow_car import BANK, run  # noqa: E402
+from examples.b_eval.b1_scenarios import judge  # noqa: E402
+from examples.b_eval.b1_slow_car import BANK, run  # noqa: E402
 
 # (判定, 最小车距, 最猛刹车, 少走了多少米)
 EXPECTED = [("过", 18.90, -0.79, 44), ("险过", 15.55, -8.00, 103), ("险过", 8.86, -8.00, 170)]

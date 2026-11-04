@@ -3,7 +3,7 @@
 场景和第 3 步一样（sim/fake_traffic.py）：三辆车，右车道 2.0–2.4 秒被挡住，3.5 秒护栏误检一次。
 跟踪器：ads/tracking.py 的 MultiTracker（本人写）；考官：evaluation/metrics.py 的 tracking_metrics（本人写）。
 
-运行（在项目根目录）：python -m examples.a6_track_eval
+运行（在项目根目录）：python -m examples.a_stack.a6_track_eval
 """
 
 from ads.tracking import MultiTracker

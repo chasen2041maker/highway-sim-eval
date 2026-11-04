@@ -3,7 +3,7 @@
 跟车要开 100 多米直线，出生点 0 前面 20 米就是路口左转，不够用。
 这个脚本只读地图，不放车、不改设置。
 
-运行（先开 CARLA）：python -m examples.tool_find_straight
+运行（先开 CARLA）：python -m examples.a_stack.tool_find_straight
 """
 
 import carla

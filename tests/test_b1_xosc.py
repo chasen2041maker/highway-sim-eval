@@ -37,7 +37,7 @@ def test_center_distance_trigger_is_rejected(tmp_path):
 
 pytest.importorskip("highway_env")
 
-from examples.b1_scenarios import judge, run  # noqa: E402
+from examples.b_eval.b1_scenarios import judge, run  # noqa: E402
 
 
 @pytest.mark.parametrize("overrides, verdict, min_gap", [({}, "过", 4.95), ({"gap": 12, "egoSpeed": 20}, "不过", 0.15)])

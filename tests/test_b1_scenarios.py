@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("highway_env")
 
-from examples.b1_scenarios import BANK, judge, run  # noqa: E402
+from examples.b_eval.b1_scenarios import BANK, judge, run  # noqa: E402
 from scenarios.lead_brake import LeadBrake  # noqa: E402
 
 

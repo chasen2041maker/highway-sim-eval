@@ -1,8 +1,8 @@
 """B1 第 4 步：同一道“前车急刹”写成 OpenSCENARIO（scenarios/lead_brake.xosc），读进来变成 LeadBrake，在 HighwayEnv 里考。
 
 运行（在项目根目录）：
-    python -m examples.b1_xosc                     用文件里的参数
-    python -m examples.b1_xosc gap=12 egoSpeed=20  临时改参数（不改文件）
+    python -m examples.b_eval.b1_xosc                     用文件里的参数
+    python -m examples.b_eval.b1_xosc gap=12 egoSpeed=20  临时改参数（不改文件）
 """
 
 from __future__ import annotations
@@ -10,10 +10,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from examples.b1_scenarios import judge, run
+from examples.b_eval.b1_scenarios import judge, run
 from scenarios.xosc import load_lead_brake
 
-XOSC = Path(__file__).resolve().parent.parent / "scenarios" / "lead_brake.xosc"
+XOSC = Path(__file__).resolve().parents[2] / "scenarios" / "lead_brake.xosc"
 
 
 def main():

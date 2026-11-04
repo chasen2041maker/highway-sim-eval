@@ -10,7 +10,7 @@
   1. 边拐弯边急刹，离车道中心最远多少？（用新尺子 lateral_error_m）
   2. 加了 PID 下层，最小车距和“IDM 的加速度直接给车”比，变大还是变小？
 
-运行（在项目根目录）：python -m examples.a8_model_drive
+运行（在项目根目录）：python -m examples.a_stack.a8_model_drive
 """
 
 import math
@@ -20,7 +20,7 @@ from ads.control import PID, find_lookahead_point, pure_pursuit_steer
 from ads.planning import StopHold, idm_accel
 from ads.vehicle import VehicleState, step
 from evaluation.metrics import lateral_error_m
-from examples.a3_pure_pursuit import make_path
+from examples.a_stack.a3_pure_pursuit import make_path
 
 DT_S = 0.1
 SIM_TIME_S = 15.0

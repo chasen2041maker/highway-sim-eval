@@ -6,7 +6,7 @@
 会打印：一圈打回来多少个点、地面点的 z、每个东西被打中几个点、前车背后有几个地面点；
 会画图：outputs/a5_scan.png（左：从天上往下看；右：只看我这条车道，从侧面看）。
 
-运行（在项目根目录）：python -m examples.a5_fake_scan
+运行（在项目根目录）：python -m examples.a_stack.a5_fake_scan
 """
 
 from pathlib import Path

@@ -4,8 +4,8 @@
 考生分四档：预测 0 秒（不预测，只认已经在我车道上的车）、0.5、1.0、1.5 秒。
 
 运行（在项目根目录）：
-    python -m examples.b1_cut_in                跑全部题 × 四档预测，打印成绩表
-    python -m examples.b1_cut_in --show 3 1.0   开窗口看第 3 题，预测 1.0 秒
+    python -m examples.b_eval.b1_cut_in                跑全部题 × 四档预测，打印成绩表
+    python -m examples.b_eval.b1_cut_in --show 3 1.0   开窗口看第 3 题，预测 1.0 秒
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ import sys
 from collections import deque
 import numpy as np
 
-from examples.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, follow, idm_driver, pick_lead, score, to_action
-from examples.b1_scenarios import judge
+from examples.b_eval.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, follow, idm_driver, pick_lead, score, to_action
+from examples.b_eval.b1_scenarios import judge
 from scenarios.cut_in import CAR_LENGTH_M, LANE_WIDTH_M, CutIn, build, cutter_lateral
 
 PREDICT_S = [0.0, 0.5, 1.0, 1.5]    # 考生预测几秒（0 = 不预测）

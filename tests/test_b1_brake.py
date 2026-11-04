@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("highway_env")
 
-from examples.b1_highway_brake import run  # noqa: E402
+from examples.b_eval.b1_highway_brake import run  # noqa: E402
 
 
 def test_lead_brake_in_highway_env():

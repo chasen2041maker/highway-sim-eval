@@ -6,8 +6,8 @@
   - 阅卷只看模拟器里的真实状态（运行记录），不看考生的草稿纸。
 
 运行（在项目根目录）：
-    python -m examples.b1_highway_brake           不开窗口，打印分数
-    python -m examples.b1_highway_brake --show    打开窗口看
+    python -m examples.b_eval.b1_highway_brake           不开窗口，打印分数
+    python -m examples.b_eval.b1_highway_brake --show    打开窗口看
 """
 
 from __future__ import annotations

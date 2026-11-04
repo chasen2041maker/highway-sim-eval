@@ -4,7 +4,7 @@
   - 直道上：会不会冲过路线（画龙）
   - 弯道上：会不会往弯里抄近路（切弯）
 
-运行（在项目根目录）：python -m examples.a3_pure_pursuit
+运行（在项目根目录）：python -m examples.a_stack.a3_pure_pursuit
 动画讲解：docs/a3_pure_pursuit_animation.html（双击用浏览器打开）
 """
 

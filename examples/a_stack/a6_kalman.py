@@ -4,7 +4,7 @@
 激光雷达一秒 10 帧，每帧量距离误差 0.2 米。卡尔曼在 ads/tracking.py 的 KalmanCV（本人写 predict / update）。
 
 只改第 18 行做实验：Q_ACCEL 越大越信雷达（反应快、抖），越小越信自己猜的（稳、慢）。
-运行（在项目根目录）：python -m examples.a6_kalman
+运行（在项目根目录）：python -m examples.a_stack.a6_kalman
 """
 
 from pathlib import Path

@@ -8,7 +8,7 @@
 两辆车都用 A1 的自行车模型 + A3 的 Pure Pursuit（前视 6 米）去跟，各开 14 秒。
 
 要回答：开完以后，谁真的在左车道正中间？一路上横向加速度最大多少？
-运行（在项目根目录）：python -m examples.a7_lane_change
+运行（在项目根目录）：python -m examples.a_stack.a7_lane_change
 """
 
 import math

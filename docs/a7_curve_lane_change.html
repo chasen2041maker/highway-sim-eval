@@ -89,7 +89,7 @@ code { font-family: var(--font-data); font-size: 0.92em; }
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">highway-sim-eval · A7 第 3 步 · examples/a7_lane_change.py</div>
+    <div class="eyebrow">highway-sim-eval · A7 第 3 步 · examples/a_stack/a7_lane_change.py</div>
     <h1>弯道变道两种画法</h1>
     <p>同一条左弯（半径 50 米），车速 10 m/s，第 4 秒开始用 4 秒往左变道 3.5 米。<b class="g">绿车</b>的路线用 Frenet 画：往“路的左边”挪。<b class="r">红车</b>的路线直接在地图上把 y 加 d：往“地图的上方”挪。两辆车都用同一个 Pure Pursuit 去跟。左边大画面跟着本车道中心线上的参考点走，地图方向不转：上方永远是 +y。</p>
   </header>
@@ -145,7 +145,7 @@ code { font-family: var(--font-data); font-size: 0.92em; }
     </section>
   </div>
 
-  <footer>数据由 <code>examples/a7_lane_change.py</code> 同一套代码算出：<code>lane_change_d</code> + <code>frenet_to_xy</code> 画路线，A1 自行车模型 + A3 Pure Pursuit（前视 6 米）去跟，每 0.05 秒一步。</footer>
+  <footer>数据由 <code>examples/a_stack/a7_lane_change.py</code> 同一套代码算出：<code>lane_change_d</code> + <code>frenet_to_xy</code> 画路线，A1 自行车模型 + A3 Pure Pursuit（前视 6 米）去跟，每 0.05 秒一步。</footer>
 </div>
 
 <script>

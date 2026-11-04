@@ -1,6 +1,6 @@
 """A8 真值版搬进 CARLA（回家待办 ③）：边拐弯边跟车，前车在弯里急刹。
 
-和纯 Python 预演 examples/a8_model_drive.py 同一个结构：
+和纯 Python 预演 examples/a_stack/a8_model_drive.py 同一个结构：
   IDM 决定快慢（规划）→ 影子车车速 + PID 追它 → 踏板（纵向控制）；
   Pure Pursuit 打方向（横向控制）；新尺子 lateral_error_m 量离车道中心多远。
 不同的是“车”换成了 CARLA 的车（有重量、刹车延迟、真的轮胎），路换成了 CARLA 地图里一个真的路口左转（程序自己在所有出生点里挑：前面先直 35–60 米、再左转）。
@@ -9,10 +9,10 @@
      前车进弯 5 米后以 −5 急刹，停在弯里。前车按剧本沿红线“滑”（关了物理，每帧摆到红线上），车速用剧本里的数（真值）。
 
 运行（在项目根目录，CARLA 要开着）：
-    python -m examples.a8_carla_drive 1          # PID 的 kp = 1
-    python -m examples.a8_carla_drive 3          # kp = 3
-    python -m examples.a8_carla_drive 1 hold     # 再加停车保持
-纯 Python 对照（examples/a8_model_drive.py）：kp 1 → 最小车距 4.36 米、最猛刹车 −4.46；kp 3 → 4.97、−3.51；离中心最远 0.09–0.10 米。
+    python -m examples.a_stack.a8_carla_drive 1          # PID 的 kp = 1
+    python -m examples.a_stack.a8_carla_drive 3          # kp = 3
+    python -m examples.a_stack.a8_carla_drive 1 hold     # 再加停车保持
+纯 Python 对照（examples/a_stack/a8_model_drive.py）：kp 1 → 最小车距 4.36 米、最猛刹车 −4.46；kp 3 → 4.97、−3.51；离中心最远 0.09–0.10 米。
 """
 
 import math

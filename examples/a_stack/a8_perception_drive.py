@@ -18,7 +18,7 @@
   2. 换成雷达以后，最小车距、最猛刹车和真值版比，变大还是变小？
   3. 右边车道停的那辆车，会不会被当成前车？
 
-运行（项目根目录）：python -m examples.a8_perception_drive
+运行（项目根目录）：python -m examples.a_stack.a8_perception_drive
 """
 
 import math
@@ -32,8 +32,8 @@ from ads.planning import StopHold, idm_accel
 from ads.tracking import MultiTracker
 from ads.vehicle import VehicleState, step
 from evaluation.metrics import lateral_error_m
-from examples.a3_pure_pursuit import make_path
-from examples.a8_model_drive import (CAR_LEN_M, DT_S, HOLD_DECEL_MPS2, LOOKAHEAD_M, MAX_ACCEL_MPS2, MAX_BRAKE_MPS2,
+from examples.a_stack.a3_pure_pursuit import make_path
+from examples.a_stack.a8_model_drive import (CAR_LEN_M, DT_S, HOLD_DECEL_MPS2, LOOKAHEAD_M, MAX_ACCEL_MPS2, MAX_BRAKE_MPS2,
                                      SIM_TIME_S, SPACING_M, START_GAP_M, START_SPEED_MPS, TARGET_SPEED_MPS,
                                      lead_step, point_at, record)
 from sim.fake_lidar import Box, scan

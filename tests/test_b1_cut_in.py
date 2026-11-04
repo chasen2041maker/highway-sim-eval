@@ -13,9 +13,9 @@ import pytest
 
 pytest.importorskip("highway_env")
 
-from examples.b1_cut_in import BANK, run  # noqa: E402
-from examples.b1_highway_brake import idm_driver  # noqa: E402
-from examples.b1_scenarios import judge  # noqa: E402
+from examples.b_eval.b1_cut_in import BANK, run  # noqa: E402
+from examples.b_eval.b1_highway_brake import idm_driver  # noqa: E402
+from examples.b_eval.b1_scenarios import judge  # noqa: E402
 
 INF = math.inf
 # 预测秒数 -> 每道题 (撞没撞, 最小车距, 判定, 刹没刹)；最小车距 inf = 它的中心没进我的车道
@@ -68,7 +68,7 @@ def test_prediction_threshold():
 
 def test_will_cross_constant_acceleration():
     """11-03：匀加速外推。第 14 题第 0.2 秒：离线 0.98 米、朝我 0.25 m/s、加速度 1.8。"""
-    from examples.b1_highway_brake import will_cross
+    from examples.b_eval.b1_highway_brake import will_cross
     assert not will_cross(0.98, 0.25, 0.0, 1.0)        # 只看速度：1 秒挪 0.25 米，到不了
     assert will_cross(0.98, 0.25, 1.8, 1.0)            # 算上加速度：0.25 + ½·1.8 = 1.15 米，够到线
     assert will_cross(0.2, 1.0, -2.0, 1.5)             # 在减速：0.5 秒后横向停下，最多挪 0.25 米

@@ -4,7 +4,7 @@
 会打印：每个框的中心、长宽，它对上的真东西（这一堆里点最多的那个真东西），真中心、真长宽，中心差多少米。
 会画图：outputs/a5_box.png（从天上看：彩色点 = 各堆，实线框 = 算出来的框，虚线框 = 真东西）。
 
-运行（在项目根目录）：python -m examples.a5_box
+运行（在项目根目录）：python -m examples.a_stack.a5_box
 """
 
 from pathlib import Path

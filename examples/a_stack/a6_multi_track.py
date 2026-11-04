@@ -4,7 +4,7 @@
 3.5 秒路边护栏 (8, −6) 误检一次；框中心带 0.2 米误差，每帧顺序打乱。跟踪器在 ads/tracking.py（本人写）。
 
 只改第 20 行做实验：MAX_MISSES = 10（被挡住 1 秒内还认得）或 3（只等 0.3 秒）。
-运行（在项目根目录）：python -m examples.a6_multi_track
+运行（在项目根目录）：python -m examples.a_stack.a6_multi_track
 """
 
 from collections import Counter

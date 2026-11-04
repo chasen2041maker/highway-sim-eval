@@ -5,7 +5,7 @@
 算速度的函数在 ads/tracking.py 的 diff_speed（本人写）。
 
 只改第 21 行的噪声做实验。
-运行（在项目根目录）：python -m examples.a6_diff_speed
+运行（在项目根目录）：python -m examples.a_stack.a6_diff_speed
 """
 
 from pathlib import Path

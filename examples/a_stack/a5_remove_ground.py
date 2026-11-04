@@ -5,7 +5,7 @@
 会画图：outputs/a5_remove_ground.png（左：留下的点，从天上看；右：只看我这条车道，从侧面看，虚线是门槛）。
 真值 labels 只在这里拿来打分和上色，remove_ground 本身看不到它。
 
-运行（在项目根目录）：python -m examples.a5_remove_ground
+运行（在项目根目录）：python -m examples.a_stack.a5_remove_ground
 """
 
 from pathlib import Path
