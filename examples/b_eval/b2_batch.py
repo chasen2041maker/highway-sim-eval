@@ -2,23 +2,26 @@
 
 这一步先在一台电脑上一个一个顺序跑，看要多久；并行、超时、重试是后面几步。
 运行（在项目根目录）：
-    python -m examples.b_eval.b2_batch
+    python -m examples.b_eval.b2_batch        一个一个跑
+    python -m examples.b_eval.b2_batch 4      开 4 个进程同时跑（第 2 步）；跑完和一个一个跑的结果逐行比对
 """
 
 from __future__ import annotations
 
 import csv
+import os
 import random
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
 
-from batch.jobs import Job, run_job
+from batch.jobs import Job, run_jobs
 from examples.b_eval.b1_cut_in_random import N_EACH, SEED, sample_cut_in
 
 np.seterr(divide="ignore")
-OUT = Path(__file__).resolve().parents[2] / "outputs" / "b2_jobs.csv"
+OUT_DIR = Path(__file__).resolve().parents[2] / "outputs"
 PREDICT_S = [0.0, 0.5, 1.0]        # 旋钮 1：往前看几秒，三档
 ACCEL = [False, True]              # 旋钮 2：匀速 / 匀加速，两种
 
@@ -45,14 +48,24 @@ def make_jobs(questions: list) -> list[Job]:
     return jobs
 
 
-def save_csv(rows: list[dict]) -> None:
+def save_csv(rows: list[dict], path: Path) -> None:
     """一个任务一行，存成表格文件（Excel 能直接打开）。"""
-    OUT.parent.mkdir(exist_ok=True)
-    with OUT.open("w", newline="", encoding="utf-8") as f:
+    path.parent.mkdir(exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))    # 表头 = 第一行的各个名字
         writer.writeheader()
         writer.writerows(rows)
-    print(f"结果表：{OUT}（{len(rows)} 行）")
+    print(f"结果表：{path}（{len(rows)} 行）")
+
+
+def same_as_sequential(path: Path) -> None:
+    """并行跑完，和一个一个跑的那张表逐行比对：结果必须一模一样。"""
+    seq = OUT_DIR / "b2_jobs_1.csv"
+    if not seq.exists():
+        print("还没有一个一个跑的结果表（先跑一次不带数字的命令），没法比对。")
+        return
+    same = seq.read_text(encoding="utf-8") == path.read_text(encoding="utf-8")
+    print(f"和一个一个跑的结果逐行比对：{'一模一样' if same else '不一样！'}")
 
 
 def print_summary(rows: list[dict]) -> None:
@@ -70,15 +83,18 @@ def print_summary(rows: list[dict]) -> None:
 
 
 def main():
+    workers = int(sys.argv[1]) if len(sys.argv) > 1 else 1        # 开几个进程；不写就是 1 = 一个一个跑
     jobs = make_jobs(make_questions())
-    print(f"{len(jobs)} 个任务（40 道题 × {len(PREDICT_S)} 档预测 × {len(ACCEL)} 种预测方法），一个一个跑……")
+    how = "一个一个跑" if workers == 1 else f"开 {workers} 个进程同时跑（这台电脑有 {os.cpu_count()} 个逻辑核）"
+    print(f"{len(jobs)} 个任务（40 道题 × {len(PREDICT_S)} 档预测 × {len(ACCEL)} 种预测方法），{how}……")
     start = time.perf_counter()
-    rows = []
-    for job in jobs:
-        rows.append(run_job(job))
+    rows = run_jobs(jobs, workers)
     seconds = time.perf_counter() - start
     print(f"用了 {seconds:.0f} 秒，平均每个任务 {seconds / len(jobs):.2f} 秒。")
-    save_csv(rows)
+    path = OUT_DIR / f"b2_jobs_{workers}.csv"
+    save_csv(rows, path)
+    if workers > 1:
+        same_as_sequential(path)
     print_summary(rows)
 
 

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 
 from scenarios.cut_in import CutIn
@@ -42,3 +43,17 @@ def run_job(job: Job) -> dict:
         "missed": bool(job.comes_in and s["crashed"] and avoidable(job.scenario)),
         "false_brake": bool(not job.comes_in and s["hardest_brake_mps2"] < -0.5),
     }
+
+
+def run_jobs(jobs: list[Job], workers: int = 1) -> list[dict]:
+    """跑一批任务，返回一样多行的结果，顺序和任务一样。
+    workers = 1：一个一个跑；workers > 1：开 workers 个进程同时跑（进程池），每个进程有自己的一份考场。"""
+    rows = []
+    if workers == 1:
+        for job in jobs:
+            rows.append(run_job(job))
+        return rows
+    with ProcessPoolExecutor(max_workers=workers) as pool:          # 开 workers 个进程
+        for row in pool.map(run_job, jobs, chunksize=8):            # 任务按顺序发出去（8 个一包），结果按顺序收回来
+            rows.append(row)
+    return rows

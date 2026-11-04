@@ -71,7 +71,7 @@
 | 感知接进闭环 | 雷达框 → 跟踪器 → 按离路线中心线多远挑前车 → IDM + PID + Pure Pursuit；用真值打分 | 和真值前车比：没撞，最小车距 7.65 vs 7.61 m，最猛刹车 −6.88 vs −4.46 m/s²（前车刹车晚约 1 秒才被看出来） | 已完成（纯 Python）；CARLA 版待做 |
 | 场景运行 | 第一道题放进 HighwayEnv（前车急刹）：司机只看模拟器给的观测，打分只看记下来的真实状态 | 同一个 IDM：最猛刹车 HighwayEnv −3.44 vs 自己的模型 −3.69 m/s²（更新顺序不同）。前车急刹五道题：撞 1 道、险过 2 道（剩 1.34 / 0.50 m）。加塞 40 道随机新题：漏刹 / 误刹 1 / 3（往前看 0.5 s）。慢车：险过，但 15 s 少走 170 m | 进行中（三种场景 + 随机新题 + 故障注入 + OpenSCENARIO） |
 
-151 个 Python 单元测试 + 21 个 C++ 测试（googletest），期望值先手算，每次 push 由 GitHub Actions 自动跑。
+152 个 Python 单元测试 + 21 个 C++ 测试（googletest），期望值先手算，每次 push 由 GitHub Actions 自动跑。
 
 ## 系统架构
 
@@ -207,7 +207,7 @@ with CarlaSim(dt_s=0.05) as sim:            # 同步模式，每帧 0.05 s
 | 随机新题 + 故障注入（HighwayEnv） | `examples/b_eval/b1_cut_in_random.py`：种子 0，20 道切进来（深 1.2–4 m）+ 20 道不切进来（0.3–0.9 m），车距 3–30 m、它 5–15 m/s、1–4 s 切完；先查“第 0 秒踩死能不能躲开”，躲不开的不算漏刹；可加延迟（`deque` 排队）、横向位置噪声 σ、连续确认帧数 | 漏刹 / 误刹（往前看 0 / 0.5 / 1.0 / 1.5 s）：无故障 2/0、1/3、1/8、1/10；延迟 0.3 s 3/0、2/3、1/8、1/10；噪声 0.2 m 2/9、1/10、1/13、1/15；噪声 + 连续 3 帧 3/1、2/4、1/6、1/11；预测算上横向加速度（匀加速外推）2/0、1/1、0/6、0/14 |
 | 场景库：慢车挡路（HighwayEnv） | `scenarios/slow_car.py`：`SlowCar`（车距、我的车速、慢车车速）+ `is_valid`（慢车要比我慢）；`examples/b_eval/b1_slow_car.py` 四道题，成绩表加平均车速、比畅通少走多少米；6 个单元测试 | 80 m / 慢车 8：过，少走 44 m。20 m / 8：险过（第 0 s 就 −8：IDM 想留 27.5 m），少走 103 m。20 m / 3：险过，平均 3.7 m/s，少走 170 m。20 m / 15：无效题 |
 | 前车急刹写成 OpenSCENARIO（HighwayEnv） | `scenarios/lead_brake.xosc`：OpenSCENARIO 1.0，`ParameterDeclarations` 四个参数 = `LeadBrake` 四个数；前车刹车由距离触发（`RelativeDistanceCondition`，车头到车尾 < `$gap`），匀减速 `rate = $leadDecel`；用 CARLA ScenarioRunner 自带的 1.0 schema 校验通过。`scenarios/xosc.py` 用 `xml.etree` 读回 `LeadBrake`；`examples/b_eval/b1_xosc.py` 可以在命令行改参数（`gap=12 egoSpeed=20`），不改文件；6 个单元测试 | 默认参数：过，4.95 m，−3.28 m/s²，和 Python 题库第 1 题一模一样（换格式分数不能变）。`gap=12 egoSpeed=20`：撞（0.15 m），同第 3 题。CARLA ScenarioRunner 跑同一个文件：待做 |
-| 批量跑：任务单（B2 第 1 步） | `batch/jobs.py`：`Job` = 题目参数 + 考生旋钮（往前看几秒、确认帧数、噪声、延迟、算不算加速度）+ 随机种子，`frozen` 打包后不能改；`run_job(job)` 跑一遍返回一行（任务里的所有格子 + 撞没撞、最小车距、最猛刹车、漏刹 / 误刹）。`examples/b_eval/b2_batch.py`：40 道随机加塞题 × 3 档预测 × 2 种预测方法 = 240 个任务，一个一个顺序跑，结果存 `outputs/b2_jobs.csv`；3 个单元测试 | 笔记本 77 s（每个任务 0.32 s），云端 71 s；汇总和 B1 随机新题一模一样（换成任务单跑法，结果不变）。下一步：进程池并行、超时、重试 |
+| 批量跑：任务单（B2 第 1 步） | `batch/jobs.py`：`Job` = 题目参数 + 考生旋钮（往前看几秒、确认帧数、噪声、延迟、算不算加速度）+ 随机种子，`frozen` 打包后不能改；`run_job(job)` 跑一遍返回一行（任务里的所有格子 + 撞没撞、最小车距、最猛刹车、漏刹 / 误刹）。`examples/b_eval/b2_batch.py`：40 道随机加塞题 × 3 档预测 × 2 种预测方法 = 240 个任务，一个一个顺序跑，结果存 `outputs/b2_jobs.csv`；3 个单元测试 | 笔记本 77 s（每个任务 0.32 s），云端 71 s；汇总和 B1 随机新题一模一样（换成任务单跑法，结果不变）。第 2 步进程池（`run_jobs(jobs, workers)`，`pool.map` 按任务顺序收结果）：笔记本 16 个逻辑核，1 / 4 / 8 / 16 个进程 88 / 26 / 22 / 16 秒（快 3.4 / 4.0 / 5.5 倍），结果表逐字一样；快不到核数倍：每个进程要启动、导入考场，任务单和结果来回传，240 个任务太少，固定开销占大头。下一步：超时、重试 |
 | 坐标转换（CARLA 实车） | Model 3，油门 0.5，steer 0.1，3 s | CARLA：y 24.49 → 26.49，yaw 0.98° → 19.77°；转换后：y −24.49 → −26.49，航向 −0.017 → −0.345 rad，与手算一致 |
 | 同步模式可复现性 | 同一脚本重复运行；`CarlaSim` 重构前后 | 位置、航向、车速逐位相同 |
 | 车型差异 | 同一控制输入，Model 3 vs CarlaCola 卡车 | 3 s 末车速 5.95 vs 1.44 m/s；每行驶 1 m 航向变化均约 0.04 rad，转弯半径与车速无关 |
@@ -239,7 +239,7 @@ highway-sim-eval/
 ├─ sim/              CARLA 连接与同步主循环、坐标转换、假激光雷达（传感器录制待加入）
 ├─ evaluation/       指标：横向误差、检测评测（召回率 / 精确率 / 中心误差）、跟踪评测
 ├─ scenarios/        场景库：一个文件一种逻辑场景（前车急刹、邻车加塞、慢车挡路）；前车急刹另有 OpenSCENARIO 版 `lead_brake.xosc` + 读取器 `xosc.py`
-├─ batch/            批量跑：任务单 Job + run_job（B2，并行 / 超时 / 重试待加）
+├─ batch/            批量跑：任务单 Job、run_job、进程池 run_jobs（B2；超时 / 重试待加）
 ├─ examples/         可直接运行的实验脚本
 │  ├─ a_stack/       A 块：从零写的驾驶栈（控制、感知、跟踪、变道）+ CARLA
 │  └─ b_eval/        B 块：仿真评测（场景库、随机新题、故障注入、OpenSCENARIO、批量跑）
@@ -282,7 +282,7 @@ highway-sim-eval/
 **B. 仿真评测与数据闭环**
 
 - [ ] 参数化场景库：邻车加塞、前车急刹、慢车挡路、行人横穿（前三种已在 HighwayEnv 里跑：模板在 `scenarios/`，题库和随机新题在 `examples/b_eval/b1_*.py`；故障注入：延迟、横向噪声；行人放 CARLA；前车急刹已写成 OpenSCENARIO 1.0（`scenarios/lead_brake.xosc`），在 HighwayEnv 里读回来分数不变，CARLA ScenarioRunner 待跑）
-- [ ] 批量调度：任务队列、超时、失败重试、结果入库（进行中：任务单 `batch/jobs.py` + 顺序跑 240 个任务 `examples/b_eval/b2_batch.py`，结果存 CSV；下一步进程池并行）
+- [ ] 批量调度：任务队列、超时、失败重试、结果入库（进行中：任务单 `batch/jobs.py` + 进程池 `run_jobs`，`examples/b_eval/b2_batch.py` 240 个任务 16 个进程 16 秒、结果和顺序跑逐字一样；下一步超时、重试）
 - [ ] 录制与回灌：回放记录数据，对感知和规划做回归
 - [ ] 指标：碰撞、TTC、舒适度、路线完成度、驾驶分；置信区间；调参与测试场景分开
 - [ ] 回归报告与看板：版本对比
