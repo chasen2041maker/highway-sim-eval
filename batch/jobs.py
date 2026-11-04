@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 
@@ -55,5 +56,45 @@ def run_jobs(jobs: list[Job], workers: int = 1) -> list[dict]:
         return rows
     with ProcessPoolExecutor(max_workers=workers) as pool:          # 开 workers 个进程
         for row in pool.map(run_job, jobs, chunksize=8):            # 任务按顺序发出去（8 个一包），结果按顺序收回来
+            rows.append(row)
+    return rows
+
+
+def job_fields(job: Job) -> dict:
+    """任务单上写的所有格子：旋钮那几列 + 题目 5 列（失败的任务没有结果，也要留下这些）。"""
+    fields = {}
+    for k, v in asdict(job).items():
+        if k != "scenario":
+            fields[k] = v
+    fields.update(asdict(job.scenario))
+    return fields
+
+
+def run_jobs_safe(jobs: list[Job], workers: int = 4, timeout_s: float = 30.0, retries: int = 1, fn=run_job) -> list[dict]:
+    """跑一批任务，不让一个坏任务拖垮整批。每个任务都有一行，status 写结果：
+      ok：正常交卷；error：报错，重试 retries 次还报错；timeout：等它超过 timeout_s 秒没交卷（卡死），不重试。
+    退出 with 时进程池被关掉，卡死的进程也一起关掉。"""
+    rows = []
+    with multiprocessing.Pool(workers) as pool:
+        pending = []
+        for job in jobs:                                              # ① 全部任务先发出去
+            pending.append(pool.apply_async(fn, (job,)))
+        for job, res in zip(jobs, pending):                           # ② 按顺序一个一个收
+            attempts = 1
+            while True:
+                try:
+                    row = {**res.get(timeout=timeout_s), "status": "ok", "error": ""}
+                    break
+                except multiprocessing.TimeoutError:                  # ③ 等太久：记超时，接着收下一个
+                    row = {**job_fields(job), "status": "timeout", "error": f"等了 {timeout_s:.0f} 秒没交卷"}
+                    break
+                except Exception as e:                                # ④ 报错：还有机会就重发一次
+                    if attempts <= retries:
+                        attempts += 1
+                        res = pool.apply_async(fn, (job,))
+                        continue
+                    row = {**job_fields(job), "status": "error", "error": f"{type(e).__name__}: {e}"}
+                    break
+            row["attempts"] = attempts
             rows.append(row)
     return rows

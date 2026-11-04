@@ -1,6 +1,7 @@
 """B2 第 1 步：任务单（Job）和批量跑（examples/b_eval/b2_batch.py）。
 
 一个任务 = 题目参数 + 考生的旋钮 + 随机种子，打包好不能改；批量跑的结果要和 B1 随机新题一模一样（2026-11-04 核对）。
+第 3 步坏任务（11-04）：卡死的等到超时记 timeout、不重试；报错的重试 1 次还崩记 error；偶发的重试后 ok；其余照常，整批 13 秒收回。
 第 2 步进程池：笔记本（16 个逻辑核）1 / 4 / 8 / 16 个进程 88 / 26 / 22 / 16 秒，结果逐行一模一样；
 快不到核数那么多倍：每个进程要自己启动、导入考场，任务单和结果要来回传，240 个任务太少，这些固定开销占了大头。
 """
@@ -22,7 +23,7 @@ def test_job_defaults_and_frozen():
 
 pytest.importorskip("highway_env")
 
-from batch.jobs import run_job, run_jobs  # noqa: E402
+from batch.jobs import run_job, run_jobs, run_jobs_safe  # noqa: E402
 from examples.b_eval.b2_batch import make_jobs, make_questions  # noqa: E402
 
 
@@ -51,3 +52,20 @@ def test_parallel_same_as_sequential():
     """进程池跑出来的行和一个一个跑的一模一样，顺序也一样（任务单写死了题目、旋钮、种子；pool.map 按任务顺序收结果）。"""
     jobs = make_jobs(make_questions())[78:90]          # 第 14、15 题的 12 个任务
     assert run_jobs(jobs, workers=2) == run_jobs(jobs, workers=1)
+
+
+def test_bad_jobs_do_not_sink_the_batch():
+    """卡死 → timeout（不重试）；每次都崩 → error（试 2 次）；偶发 → 重试后 ok；正常的照常。"""
+    from dataclasses import replace
+
+    from examples.b_eval.b2_faults import FLAKY_MARK, misbehaving_run_job
+    FLAKY_MARK.parent.mkdir(exist_ok=True)
+    FLAKY_MARK.unlink(missing_ok=True)
+    good = make_jobs(make_questions())[:2]
+    bad = [replace(good[0], question=q) for q in (901, 902, 903)]
+    rows = run_jobs_safe([good[0], *bad, good[1]], workers=3, timeout_s=3, retries=1, fn=misbehaving_run_job)
+    got = [(r["question"], r["status"], r["attempts"]) for r in rows]
+    assert got == [(1, "ok", 1), (901, "timeout", 1), (902, "error", 2), (903, "ok", 2), (1, "ok", 1)]
+    assert rows[2]["error"] == "RuntimeError: 考场崩了"
+    assert rows[1]["gap_m"] == good[0].scenario.gap_m          # 失败的任务也留下了任务单上的格子
+    FLAKY_MARK.unlink(missing_ok=True)
