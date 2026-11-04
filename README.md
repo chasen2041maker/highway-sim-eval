@@ -71,7 +71,7 @@ The project is built to answer:
 | Perception in the loop | LiDAR boxes → tracker → lead car picked by distance to the route centre line → IDM + PID + Pure Pursuit; scored on ground truth | vs ground-truth lead: no crash, min gap 7.65 vs 7.61 m, hardest brake −6.88 vs −4.46 m/s² (braking seen about 1 s late) | Done (pure Python); CARLA next |
 | Scenario runner | First scenario in HighwayEnv (hard braking ahead): the driver sees only the simulator's observations, scoring uses only the logged true state | Same IDM: hardest brake −3.44 m/s² in HighwayEnv vs −3.69 in my own model (update order). Five-question hard-braking bank: 1 crash, 2 near misses (1.34 / 0.50 m left). 40 random cut-ins: 1 missed / 3 false brakes (looking 0.5 s ahead). Slow car: near miss, yet 170 m lost in 15 s | In progress (three scenarios + random questions + fault injection + OpenSCENARIO) |
 
-148 Python unit tests and 21 C++ tests (googletest), with expected values worked out by hand, run by GitHub Actions on every push.
+151 Python unit tests and 21 C++ tests (googletest), with expected values worked out by hand, run by GitHub Actions on every push.
 
 ## Architecture
 
@@ -207,6 +207,7 @@ Every row comes from a script in `examples/`; the setup column says what was run
 | Random questions + fault injection (HighwayEnv) | `examples/b_eval/b1_cut_in_random.py`: seed 0, 20 cut-ins (1.2–4 m deep) + 20 that stay out (0.3–0.9 m), gap 3–30 m, its speed 5–15 m/s, 1–4 s to cut in; first checks whether braking fully at 0 s avoids it, and unavoidable ones don't count as missed; optional delay (a `deque` queue), lateral position noise σ, frames to confirm | Missed / false (looking 0 / 0.5 / 1.0 / 1.5 s ahead): no faults 2/0, 1/3, 1/8, 1/10; 0.3 s delay 3/0, 2/3, 1/8, 1/10; 0.2 m noise 2/9, 1/10, 1/13, 1/15; noise + 3 frames 3/1, 2/4, 1/6, 1/11; prediction with lateral acceleration (constant-acceleration extrapolation) 2/0, 1/1, 0/6, 0/14 |
 | Scenario bank: slow car (HighwayEnv) | `scenarios/slow_car.py`: `SlowCar` (gap, ego speed, slow car speed) + `is_valid` (the slow car must be slower than me); `examples/b_eval/b1_slow_car.py`: four questions, with average speed and distance lost vs an empty road; 6 unit tests | 80 m / slow car 8: pass, 44 m lost. 20 m / 8: near miss (−8 at 0 s: IDM wants 27.5 m), 103 m lost. 20 m / 3: near miss, 3.7 m/s average, 170 m lost. 20 m / 15: invalid |
 | Hard braking as OpenSCENARIO (HighwayEnv) | `scenarios/lead_brake.xosc`: OpenSCENARIO 1.0; the four `ParameterDeclarations` are the four numbers of `LeadBrake`; the lead's braking is triggered by distance (`RelativeDistanceCondition`, bumper to bumper < `$gap`), linear deceleration `rate = $leadDecel`; validates against the 1.0 schema shipped with CARLA ScenarioRunner. `scenarios/xosc.py` reads it back into `LeadBrake` with `xml.etree`; `examples/b_eval/b1_xosc.py` takes parameter overrides on the command line (`gap=12 egoSpeed=20`) without editing the file; 6 unit tests | Defaults: pass, 4.95 m, −3.28 m/s², identical to question 1 of the Python bank (changing the format must not change the score). `gap=12 egoSpeed=20`: crash (0.15 m), same as question 3. Same file in CARLA ScenarioRunner: to do |
+| Batch runs: jobs (B2 step 1) | `batch/jobs.py`: `Job` = scenario parameters + driver knobs (look-ahead, confirm frames, noise, delay, acceleration on/off) + random seed, `frozen` so it can't change once packed; `run_job(job)` runs it and returns one row (every field of the job + crash, minimum gap, hardest brake, missed / false brake). `examples/b_eval/b2_batch.py`: 40 random cut-ins × 3 look-aheads × 2 prediction methods = 240 jobs, run one after another, results in `outputs/b2_jobs.csv`; 3 unit tests | 77 s on the laptop (0.32 s per job), 71 s in the cloud; the summary matches the B1 random questions exactly (same results, new way of running them). Next: a process pool, timeouts, retries |
 | Coordinate transform (CARLA) | Model 3, throttle 0.5, steer 0.1, 3 s | CARLA: y 24.49 → 26.49, yaw 0.98° → 19.77°; after conversion: y −24.49 → −26.49, heading −0.017 → −0.345 rad, matching hand calculation |
 | Synchronous-mode reproducibility | The same script run repeatedly; before and after refactoring `CarlaSim` | Position, heading and speed identical to the last digit |
 | Vehicle differences | Same control input, Model 3 vs CarlaCola truck | Speed at 3 s 5.95 vs 1.44 m/s; heading change per metre travelled about 0.04 rad for both, so the turning radius doesn't depend on speed |
@@ -238,6 +239,7 @@ highway-sim-eval/
 ├─ sim/              CARLA connection and synchronous loop, coordinate transforms, simulated LiDAR
 ├─ evaluation/       metrics: lateral error, detection evaluation (recall / precision / centre error), tracking evaluation
 ├─ scenarios/        scenario library: one file per logical scenario (lead car brakes hard, cut-in, slow car); hard braking also as OpenSCENARIO `lead_brake.xosc` + reader `xosc.py`
+├─ batch/            batch runs: Job + run_job (B2; parallel / timeouts / retries to come)
 ├─ examples/         runnable experiment scripts
 │  ├─ a_stack/       part A: the driving stack written from scratch (control, perception, tracking, lane change) + CARLA
 │  └─ b_eval/        part B: simulation evaluation (scenarios, random questions, fault injection, OpenSCENARIO, batch runs)
@@ -247,7 +249,7 @@ highway-sim-eval/
 └─ docs/             interactive explainers (open in a browser); images/ holds README figures
 ```
 
-Planned additions: `evaluation/` batch runner and metrics · `dashboard/` web dashboard · `mining/` data mining · `learning/` closed-loop training · `ros2/` ROS 2 publishing and bags.
+Planned additions: `batch/` parallel runs, timeouts, retries, results storage · `dashboard/` web dashboard · `mining/` data mining · `learning/` closed-loop training · `ros2/` ROS 2 publishing and bags.
 
 ## Roadmap
 
@@ -280,7 +282,7 @@ Planned additions: `evaluation/` batch runner and metrics · `dashboard/` web da
 **B. Simulation evaluation and data loop**
 
 - [ ] Parametric scenarios: cut-ins, hard braking ahead, slow car blocking the lane, pedestrian crossing (the first three run in HighwayEnv: templates in `scenarios/`, banks and random questions in `examples/b_eval/b1_*.py`; fault injection: delay, lateral noise; pedestrians go to CARLA; hard braking is now OpenSCENARIO 1.0 (`scenarios/lead_brake.xosc`), same score when read back in HighwayEnv, CARLA ScenarioRunner to do)
-- [ ] Batch runner: task queue, timeouts, retries, results in a database
+- [ ] Batch runner: task queue, timeouts, retries, results in a database (in progress: jobs in `batch/jobs.py`, 240 jobs run one after another by `examples/b_eval/b2_batch.py`, results in a CSV; next: a process pool)
 - [ ] Record and replay: replay logged data to regression-test perception and planning
 - [ ] Metrics: collisions, TTC, comfort, route completion, driving score; confidence intervals; tuning and test scenarios kept separate
 - [ ] Regression reports and a dashboard for version comparison

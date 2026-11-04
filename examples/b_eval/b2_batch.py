@@ -1,0 +1,86 @@
+"""B2 第 1 步：批量跑——40 道随机加塞题 × 几组旋钮，一个任务一行，存成表（outputs/b2_jobs.csv）。
+
+这一步先在一台电脑上一个一个顺序跑，看要多久；并行、超时、重试是后面几步。
+运行（在项目根目录）：
+    python -m examples.b_eval.b2_batch
+"""
+
+from __future__ import annotations
+
+import csv
+import random
+import time
+from pathlib import Path
+
+import numpy as np
+
+from batch.jobs import Job, run_job
+from examples.b_eval.b1_cut_in_random import N_EACH, SEED, sample_cut_in
+
+np.seterr(divide="ignore")
+OUT = Path(__file__).resolve().parents[2] / "outputs" / "b2_jobs.csv"
+PREDICT_S = [0.0, 0.5, 1.0]        # 旋钮 1：往前看几秒，三档
+ACCEL = [False, True]              # 旋钮 2：匀速 / 匀加速，两种
+
+
+def make_questions() -> list:
+    """出题：和 B1 随机新题同一个种子，所以就是那 40 道。每道题记（题目, 会不会进来）。"""
+    rng = random.Random(SEED)
+    questions = []
+    for _ in range(N_EACH):
+        questions.append((sample_cut_in(rng, True), True))      # 前 20 道：会进来
+    for _ in range(N_EACH):
+        questions.append((sample_cut_in(rng, False), False))    # 后 20 道：不进来
+    return questions
+
+
+def make_jobs(questions: list) -> list[Job]:
+    """排列组合：每道题 × 每档预测 × 每种方法 = 一个任务。"""
+    jobs = []
+    for n, (scenario, comes_in) in enumerate(questions, start=1):   # 第 n 道题（从 1 数）
+        for p in PREDICT_S:                                           # 每档预测
+            for a in ACCEL:                                           # 每种方法
+                jobs.append(Job(question=n, scenario=scenario, comes_in=comes_in,
+                                predict_s=p, accel=a, seed=n))
+    return jobs
+
+
+def save_csv(rows: list[dict]) -> None:
+    """一个任务一行，存成表格文件（Excel 能直接打开）。"""
+    OUT.parent.mkdir(exist_ok=True)
+    with OUT.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))    # 表头 = 第一行的各个名字
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"结果表：{OUT}（{len(rows)} 行）")
+
+
+def print_summary(rows: list[dict]) -> None:
+    """按旋钮分组，数漏刹和误刹。"""
+    print()
+    print("预测几秒  预测方法   漏刹  误刹")
+    for p in PREDICT_S:
+        for a in ACCEL:
+            missed = false = 0
+            for r in rows:
+                if r["predict_s"] == p and r["accel"] == a:
+                    missed += r["missed"]                  # True 当 1、False 当 0
+                    false += r["false_brake"]
+            print(f"  {p:.1f}     {'匀加速' if a else '匀速  '}    {missed:>3}   {false:>3}")
+
+
+def main():
+    jobs = make_jobs(make_questions())
+    print(f"{len(jobs)} 个任务（40 道题 × {len(PREDICT_S)} 档预测 × {len(ACCEL)} 种预测方法），一个一个跑……")
+    start = time.perf_counter()
+    rows = []
+    for job in jobs:
+        rows.append(run_job(job))
+    seconds = time.perf_counter() - start
+    print(f"用了 {seconds:.0f} 秒，平均每个任务 {seconds / len(jobs):.2f} 秒。")
+    save_csv(rows)
+    print_summary(rows)
+
+
+if __name__ == "__main__":
+    main()
