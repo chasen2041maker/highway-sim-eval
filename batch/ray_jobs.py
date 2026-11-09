@@ -49,9 +49,16 @@ class Examiner:
         open_exam_room(setup_s)       # 只在创建时开一次
         self.done = 0                 # 自己的状态：考了几道（task 做不到：考完就散，什么都不记得）
 
-    def run(self, job: Job) -> dict:
+    def run(self, job: Job, extra_s: float = 0.0) -> dict:
+        """考一道。extra_s > 0：假装这道题特别慢（多花 extra_s 秒），用来看慢题会不会堵住别人。"""
+        if extra_s > 0:
+            time.sleep(extra_s)
         self.done += 1
         return run_job(job)
+
+    def run_numbered(self, i: int, job: Job, extra_s: float = 0.0) -> tuple[int, dict]:
+        """考一道，连同它是第几个任务一起交回（谁空谁领时，收回来的顺序是乱的，要靠这个编号排回去）。"""
+        return i, self.run(job, extra_s)
 
     def how_many(self) -> int:
         return self.done
@@ -73,21 +80,44 @@ def run_jobs_ray(jobs: list[Job], workers: int = 4, setup_s: float = 0.0) -> lis
     return rows
 
 
-def run_jobs_ray_actors(jobs: list[Job], workers: int = 4, setup_s: float = 0.0) -> tuple[list[dict], list[int]]:
-    """actor：先开 workers 个常驻考场，任务轮流派给它们。返回（结果，每个考场考了几道）。"""
+def run_jobs_ray_actors(jobs: list[Job], workers: int = 4, setup_s: float = 0.0,
+                        extra_s: list[float] | None = None, pull: bool = False) -> tuple[list[dict], list[int]]:
+    """actor：先开 workers 个常驻考场，再把任务派给它们。返回（结果，每个考场考了几道），结果顺序和任务一样。
+    pull = False：轮流派（第 i 题给 i % workers 号），一开始就排好队；
+    pull = True ：谁空谁领（Ray 的 ActorPool），哪个考场考完了，再给它下一道。
+      要用 map_unordered：有序的 map 必须按任务顺序收卷，前面的慢题没收，后面考完的考场也空不出来，
+      结果和轮流派一样（11-09 实测：每个考场还是 15 道）。
+    extra_s：每道题假装多花几秒（None = 都不多花）。"""
     import ray
+    from ray.util import ActorPool
 
+    if extra_s is None:
+        extra_s = [0.0] * len(jobs)
     _start_ray(workers)
     try:
         remote_examiner = ray.remote(num_cpus=1)(Examiner)   # 把这个类变成“常驻工人”，每个占 1 个 CPU
         examiners = []
         for _ in range(workers):
             examiners.append(remote_examiner.remote(setup_s))   # 开考场：每个只开这一次
-        futures = []
-        for i, job in enumerate(jobs):
-            examiner = examiners[i % workers]                # 轮流派：第 0 题给 0 号，第 1 题给 1 号……
-            futures.append(examiner.run.remote(job))         # 同一个考场一次考一道，排队
-        rows = ray.get(futures)
+        if pull:
+            pool = ActorPool(examiners)
+
+            def give(examiner, item):                        # 把一道题交给一个空着的考场
+                i, job, extra = item
+                return examiner.run_numbered.remote(i, job, extra)
+
+            items = []
+            for i, (job, extra) in enumerate(zip(jobs, extra_s)):
+                items.append((i, job, extra))
+            rows = [None] * len(jobs)
+            for i, row in pool.map_unordered(give, items):   # 谁先考完先收谁，收了它就马上空出来领下一道
+                rows[i] = row                                # 按编号放回原来的位置
+        else:
+            futures = []
+            for i, job in enumerate(jobs):
+                examiner = examiners[i % workers]            # 轮流派：第 0 题给 0 号，第 1 题给 1 号……
+                futures.append(examiner.run.remote(job, extra_s[i]))   # 同一个考场一次考一道，排队
+            rows = ray.get(futures)
         count_futures = []
         for e in examiners:
             count_futures.append(e.how_many.remote())
