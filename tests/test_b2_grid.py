@@ -35,6 +35,17 @@ def test_questions_alternate_and_trial_is_prefix():
     assert (sc8.gap_m, sc8.cut_speed_mps, sc8.cut_time_s, sc8.cut_depth_m) == (14.8, 10.0, 1.7, 0.44)
 
 
+def test_seed_2_is_another_batch():
+    """种子 2 出的是另一批题（还是交替出），同一个种子出两次一模一样；种子 1 的表名不变，种子 2 加后缀。"""
+    from examples.b_eval.b2_grid import table_path
+    a, b = make_questions(20, seed=2), make_questions(20, seed=2)
+    assert a == b
+    assert a != make_questions(20)
+    assert [ci for _, ci in a[:4]] == [True, False, True, False]
+    assert table_path(1000, 1).name == "b2_grid_1000.csv"
+    assert table_path(1000, 2).name == "b2_grid_1000_seed2.csv"
+
+
 def test_jobs_seed_is_question_number():
     """3 道题 × 64 组 = 192 个任务；第 2 题的 64 个任务种子都是 2；第 87 个任务 = 第 2 题、只有延迟、往前看 0.5 · 确认 3 帧 · 匀速。"""
     jobs = make_jobs(make_questions(3), make_knob_sets())

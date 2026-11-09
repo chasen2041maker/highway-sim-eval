@@ -7,6 +7,7 @@
 运行（在项目根目录）：
     python -m examples.b_eval.b2_balance 50 10      读 outputs/b2_grid_50.csv，漏刹 1 道 = 误刹 10 道
     python -m examples.b_eval.b2_balance 1000 10    读 1000 道的表
+    python -m examples.b_eval.b2_balance 1000 10 2  读种子 2 那批新题的表 outputs/b2_grid_1000_seed2.csv
 """
 
 from __future__ import annotations
@@ -23,9 +24,12 @@ CONFIRM_FRAMES = ["1", "3"]
 ACCEL = ["False", "True"]
 
 
-def load(n: int) -> list[dict]:
-    """读 outputs/b2_grid_<n>.csv，一行变成一个字典：{列名: 这一格的文字}。"""
-    path = OUT_DIR / f"b2_grid_{n}.csv"
+def load(n: int, seed: int = 1) -> list[dict]:
+    """读 outputs/b2_grid_<n>.csv（种子 2 就读 b2_grid_<n>_seed2.csv），一行变成一个字典：{列名: 这一格的文字}。"""
+    if seed == 1:
+        path = OUT_DIR / f"b2_grid_{n}.csv"
+    else:
+        path = OUT_DIR / f"b2_grid_{n}_seed{seed}.csv"
     with path.open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     print(f"读了 {path.name}：{len(rows)} 行")
@@ -110,7 +114,8 @@ def print_overall(counts: dict, weight: float) -> None:
 def main():
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 50              # 读哪张表
     weight = float(sys.argv[2]) if len(sys.argv) > 2 else 10.0     # 漏刹 1 道算几道误刹
-    rows = load(n)
+    seed = int(sys.argv[3]) if len(sys.argv) > 3 else 1            # 读哪个种子的表
+    rows = load(n, seed)
     n_avoidable, n_unavoidable, n_out = question_counts(rows)
     print(f"会进来的题：能躲开 {n_avoidable} 道（另有 {n_unavoidable} 道踩死也躲不开，撞了不算漏刹）；不进来的题 {n_out} 道")
     print(f"代价 = 漏刹 × {weight:g} + 误刹")
