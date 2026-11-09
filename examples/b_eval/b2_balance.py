@@ -50,6 +50,19 @@ def count(rows: list[dict]) -> dict:
     return counts
 
 
+def not_ok_groups(rows: list[dict]) -> dict:
+    """没交卷（status 不是 ok：卡死 / 报错）的任务，按组数：{(噪声, 延迟, 往前看, 确认, 匀加速): 几个}。
+    它们没有结果，漏刹 / 误刹格子是空的，数的时候等于“没漏刹、没误刹”——那几组的数会偏好看。"""
+    groups = {}
+    for r in rows:
+        if r.get("status", "ok") != "ok":
+            key = (r["noise_y_m"], r["delay_s"], r["predict_s"], r["confirm_frames"], r["accel"])
+            if key not in groups:
+                groups[key] = 0
+            groups[key] += 1
+    return groups
+
+
 def question_counts(rows: list[dict]) -> tuple[int, int, int]:
     """数题：会进来的题里能躲开几道、踩死也躲不开几道（这种撞了不算漏刹），不进来的题几道。"""
     come_in, unavoidable, stay_out = set(), set(), set()
@@ -116,6 +129,12 @@ def main():
     weight = float(sys.argv[2]) if len(sys.argv) > 2 else 10.0     # 漏刹 1 道算几道误刹
     seed = int(sys.argv[3]) if len(sys.argv) > 3 else 1            # 读哪个种子的表
     rows = load(n, seed)
+    bad = not_ok_groups(rows)
+    if bad:
+        print("注意：下面这几组有任务没交卷（卡死 / 报错），它们被当成没漏刹、没误刹，这几组的数偏好看。先重跑它们，再信 ★：")
+        for key, k in bad.items():
+            noise, delay, p, c, a = key
+            print(f"  噪声 {noise} 米、延迟 {delay} 秒、往前看 {p} 秒、确认 {c} 帧、匀加速 {a}：{k} 个没交卷")
     n_avoidable, n_unavoidable, n_out = question_counts(rows)
     print(f"会进来的题：能躲开 {n_avoidable} 道（另有 {n_unavoidable} 道踩死也躲不开，撞了不算漏刹）；不进来的题 {n_out} 道")
     print(f"代价 = 漏刹 × {weight:g} + 误刹")

@@ -46,6 +46,18 @@ def test_count_groups_and_questions(tmp_path, monkeypatch):
     assert b2_balance.question_counts(table) == (1, 1, 2)            # 能躲开 1 道、躲不开 1 道、不进来 2 道
 
 
+def test_not_ok_groups_found():
+    """没交卷的任务要按组找出来提醒：它们的漏刹 / 误刹格子是空的，数的时候等于没漏刹、没误刹（11-09）。"""
+    ok = {"noise_y_m": "0.0", "delay_s": "0.0", "predict_s": "0.5", "confirm_frames": "1", "accel": "True", "status": "ok"}
+    stuck = dict(ok, status="timeout")
+    broken = dict(ok, predict_s="1.0", status="error")
+    assert b2_balance.not_ok_groups([ok, ok]) == {}
+    assert b2_balance.not_ok_groups([ok, stuck, broken, stuck]) == {
+        ("0.0", "0.0", "0.5", "1", "True"): 2,
+        ("0.0", "0.0", "1.0", "1", "True"): 1,
+    }
+
+
 def test_load_seed_2_table(tmp_path, monkeypatch):
     """种子 2 读 b2_grid_<n>_seed2.csv，不会读到种子 1 那张表。"""
     for name, q in (("b2_grid_4.csv", 1), ("b2_grid_4_seed2.csv", 2)):

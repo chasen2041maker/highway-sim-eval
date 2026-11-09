@@ -48,11 +48,24 @@ def make_jobs(questions: list) -> list[Job]:
     return jobs
 
 
+def all_columns(rows: list[dict]) -> list[str]:
+    """所有行里出现过的列名合起来，按第一次出现的顺序排，不重复。
+    卡死 / 报错的行没有结果那几列，所以表头不能只看第一行（11-09 发现：第 1 个任务卡死，整张表存不下来）。
+    例子：[{"a": 1, "status": "timeout"}, {"a": 2, "missed": True, "status": "ok"}] → ["a", "status", "missed"]
+    """
+    columns = []
+    for r in rows:
+        for name in r:
+            if name not in columns:
+                columns.append(name)
+    return columns
+
+
 def save_csv(rows: list[dict], path: Path) -> None:
-    """一个任务一行，存成表格文件（Excel 能直接打开）。"""
+    """一个任务一行，存成表格文件（Excel 能直接打开）。某一行缺的列留空。"""
     path.parent.mkdir(exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))    # 表头 = 第一行的各个名字
+        writer = csv.DictWriter(f, fieldnames=all_columns(rows))   # 表头 = 所有行出现过的列名
         writer.writeheader()
         writer.writerows(rows)
     print(f"结果表：{path}（{len(rows)} 行）")

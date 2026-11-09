@@ -21,6 +21,24 @@ def test_job_defaults_and_frozen():
         job.predict_s = 0.5                       # 任务单封了口，不能改
 
 
+def test_save_csv_when_first_job_failed(tmp_path):
+    """第 1 个任务卡死：它没有结果那几列。表头要按所有行合起来，不能只看第一行，否则整张表存不下来（11-09 发现）。"""
+    import csv
+
+    from examples.b_eval.b2_batch import all_columns, save_csv
+    failed = {"question": 1, "status": "timeout", "error": "等了 60 秒没交卷", "attempts": 1}
+    ok = {"question": 2, "missed": False, "false_brake": True, "status": "ok", "error": "", "attempts": 1}
+    assert all_columns([failed, ok]) == ["question", "status", "error", "attempts", "missed", "false_brake"]
+    assert all_columns([ok, failed]) == ["question", "missed", "false_brake", "status", "error", "attempts"]
+    path = tmp_path / "first_failed.csv"
+    save_csv([failed, ok], path)
+    with path.open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 2
+    assert rows[0]["status"] == "timeout" and rows[0]["missed"] == ""     # 卡死的那行：结果格子空着
+    assert rows[1]["false_brake"] == "True"
+
+
 pytest.importorskip("highway_env")
 
 from batch.jobs import run_job, run_jobs, run_jobs_safe  # noqa: E402
