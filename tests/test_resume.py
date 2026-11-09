@@ -28,6 +28,22 @@ def test_load_done_only_ok_and_skips_half_line(tmp_path):
     assert load_done(tmp_path / "none.jsonl") == {}
 
 
+def test_old_results_from_other_code_do_not_count(tmp_path):
+    """代码指纹对不上（考生的代码改过）的旧结果不算数，免得新旧结果混在一张表里。"""
+    log = tmp_path / "log.jsonl"
+    log.write_text(json.dumps({"job_key": "A", "status": "ok", "code": "old"}) + "\n"
+                   + json.dumps({"job_key": "B", "status": "ok", "code": "new"}) + "\n", encoding="utf-8")
+    assert list(load_done(log, code="new")) == ["B"]
+    assert list(load_done(log)) == ["A", "B"]
+
+
+def test_code_fingerprint_is_stable():
+    """同一份代码算两次，指纹一样，12 位。"""
+    from batch.resume import code_fingerprint
+    assert code_fingerprint() == code_fingerprint()
+    assert len(code_fingerprint()) == 12
+
+
 pytest.importorskip("highway_env")
 
 from batch.jobs import run_jobs_safe  # noqa: E402

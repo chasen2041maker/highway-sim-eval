@@ -35,6 +35,14 @@ def test_questions_alternate_and_trial_is_prefix():
     assert (sc8.gap_m, sc8.cut_speed_mps, sc8.cut_time_s, sc8.cut_depth_m) == (14.8, 10.0, 1.7, 0.44)
 
 
+def test_parse_args():
+    """命令行：三个数可以少写；--fresh、--stop-after N 放在哪都行。"""
+    from examples.b_eval.b2_grid import parse_args
+    assert parse_args(["1000", "16", "2"]) == (1000, 16, 2, False, None)
+    assert parse_args(["1000", "16", "2", "--fresh", "--stop-after", "5000"]) == (1000, 16, 2, True, 5000)
+    assert parse_args(["50", "--stop-after", "10", "4"])[:2] == (50, 4)
+
+
 def test_seed_2_is_another_batch():
     """种子 2 出的是另一批题（还是交替出），同一个种子出两次一模一样；种子 1 的表名不变，种子 2 加后缀。"""
     from examples.b_eval.b2_grid import table_path

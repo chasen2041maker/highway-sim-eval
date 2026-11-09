@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 
-from batch.resume import PowerCut, load_done, run_jobs_resumable
+from batch.resume import PowerCut, code_fingerprint, load_done, run_jobs_resumable
 from examples.b_eval.b2_batch import OUT_DIR, make_jobs, make_questions, same_as_sequential, save_csv
 
 np.seterr(divide="ignore")
@@ -36,7 +36,7 @@ def main():
     try:
         rows, n_run = run_jobs_resumable(jobs, log, workers=workers, timeout_s=60, retries=1, stop_after=stop_after)
     except PowerCut as e:
-        print(f"  {e}。日志里现在有 {len(load_done(log))} 个交卷的（用了 {time.perf_counter() - start:.0f} 秒）")
+        print(f"  {e}。日志里现在有 {len(load_done(log, code_fingerprint()))} 个交卷的（用了 {time.perf_counter() - start:.0f} 秒）")
         print("  再跑一次，去掉 --fresh 和 --stop-after，就接着考")
         return
     print(f"  这次考了 {n_run} 个，用了 {time.perf_counter() - start:.0f} 秒")
