@@ -1,5 +1,7 @@
 """B2：Ray 跑同一批任务（batch/ray_jobs.py）。没装 Ray 或模拟器的电脑（比如 CI）会跳过。"""
 
+import sys
+
 import pytest
 
 pytest.importorskip("ray")
@@ -30,3 +32,14 @@ def test_ray_actor_pool_same_order():
     rows, counts = run_jobs_ray_actors(JOBS, workers=2, extra_s=extra, pull=True)
     assert rows == run_jobs(JOBS, workers=1)
     assert sum(counts) == 12
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows 上 Ray（试验性支持）重开崩掉的 actor 时本机集群会失联（11-09 实测），等 Linux / WSL2 再测")
+def test_ray_actor_crash_and_restart(tmp_path):
+    """第 4 个任务把考场弄崩（只崩一次）：不重开，整批报错；自动重开 1 次，结果和一个一个跑的一样。"""
+    mark = tmp_path / "crash.mark"
+    with pytest.raises(Exception):
+        run_jobs_ray_actors(JOBS, workers=2, pull=True, crash_at=3, crash_mark=str(mark), max_restarts=0)
+    mark.unlink()
+    rows, _ = run_jobs_ray_actors(JOBS, workers=2, pull=True, crash_at=3, crash_mark=str(mark), max_restarts=1)
+    assert rows == run_jobs(JOBS, workers=1)
