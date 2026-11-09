@@ -72,11 +72,12 @@ def job_fields(job: Job) -> dict:
 
 
 def run_jobs_safe(jobs: list[Job], workers: int = 4, timeout_s: float = 30.0, retries: int = 1, fn=run_job,
-                  progress_every: int = 0) -> list[dict]:
+                  progress_every: int = 0, on_row=None) -> list[dict]:
     """跑一批任务，不让一个坏任务拖垮整批。每个任务都有一行，status 写结果：
       ok：正常交卷；error：报错，重试 retries 次还报错；timeout：等它超过 timeout_s 秒没交卷（卡死），不重试。
     退出 with 时进程池被关掉，卡死的进程也一起关掉。
-    progress_every > 0：每收回这么多个任务，打印一行进度（任务多、要跑几十分钟时用）。"""
+    progress_every > 0：每收回这么多个任务，打印一行进度（任务多、要跑几十分钟时用）。
+    on_row：每收回一个任务就调一次 on_row(job, row)，比如马上把这一行存进硬盘（边考边存，见 batch/resume.py）。"""
     rows = []
     start = time.perf_counter()
     with multiprocessing.Pool(workers) as pool:
@@ -101,6 +102,8 @@ def run_jobs_safe(jobs: list[Job], workers: int = 4, timeout_s: float = 30.0, re
                     break
             row["attempts"] = attempts
             rows.append(row)
+            if on_row is not None:
+                on_row(job, row)
             if progress_every > 0 and len(rows) % progress_every == 0:
                 print(f"  收回 {len(rows)} / {len(jobs)} 个（{time.perf_counter() - start:.0f} 秒）")
     return rows
