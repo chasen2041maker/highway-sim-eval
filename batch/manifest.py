@@ -29,6 +29,12 @@ def _git(*args: str) -> str:
     return out.stdout.rstrip()
 
 
+def _code_fingerprint() -> str:
+    """代码指纹（见 batch/resume.py）：考生、考场、出题代码的哈希，改一个字就变。11-10 起记进运行清单。"""
+    from batch.resume import code_fingerprint      # 放在函数里：resume 不依赖 manifest，避免互相导入
+    return code_fingerprint()
+
+
 def snapshot() -> dict:
     """开跑前拍一张快照：什么时候、哪条命令、哪版代码（有没有没提交的改动）、什么环境、哪台电脑。"""
     changed = _git("status", "--porcelain").splitlines()   # 改了没提交的、新建了还没进 git 的都算；outputs 在 .gitignore 里，不算
@@ -40,6 +46,7 @@ def snapshot() -> dict:
         "started_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "command": " ".join(sys.orig_argv),
         "commit": _git("rev-parse", "--short", "HEAD"),
+        "code_fingerprint": _code_fingerprint(),
         "uncommitted_changes": [line[3:] for line in changed],
         "python": platform.python_version(),
         "highway_env": highway_env_version,
