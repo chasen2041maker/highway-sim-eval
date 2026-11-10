@@ -31,8 +31,10 @@ BANK = [
 ]
 
 
-def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0, noise_y_m: float = 0.0, seed: int = 0, confirm_frames: int = 1, accel: bool = False) -> dict:
-    """考一道题：每 0.1 秒 看 → 想 → 动 → 世界走一步；它第 0 秒起按题目往我这边挪（带真的横向速度）。"""
+def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0, noise_y_m: float = 0.0, seed: int = 0, confirm_frames: int = 1, accel: bool = False,
+        frames: list | None = None) -> dict:
+    """考一道题：每 0.1 秒 看 → 想 → 动 → 世界走一步；它第 0 秒起按题目往我这边挪（带真的横向速度）。
+    frames 给了一个空列表的话，每一帧往里录一条：考生看到了什么、真实世界怎样、考生做了什么（B3 录像 / 回灌用）。"""
     env, cutter = build(sc, DT_S, SIM_TIME_S, MAX_BRAKE_MPS2, show)
     world = env.unwrapped
     ego = world.vehicle
@@ -71,6 +73,15 @@ def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 
             log["ego_v"].append(ego.speed)
             log["lead_v"].append(sc.cut_speed_mps)
             log["accel"].append(action[0] * MAX_BRAKE_MPS2)
+            if frames is not None:                                          # 录像：这一帧
+                frames.append({
+                    "k": k, "t_s": round(t_s, 1),
+                    "seen": late[0].tolist(),                               # 考生看到的（已经过噪声和延迟）
+                    "ego_x": float(ego.position[0]), "ego_y": float(ego.position[1]), "ego_v": float(ego.speed),
+                    "cutter_x": float(cutter.position[0]), "cutter_y": float(cutter.position[1]),   # 真实世界
+                    "lead_seen": lead is not None,                          # 考生的决定：认没认出前车
+                    "accel_cmd": float(action[0] * MAX_BRAKE_MPS2),         # 考生的决定：踩多大（负 = 刹车）
+                })
             obs, reward, terminated, truncated, info = env.step(action)     # 考场
             late.append(sensor(obs))                                         # 新路况先过“传感器”，再排到队尾
             if info["crashed"]:
