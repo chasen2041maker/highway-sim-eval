@@ -13,16 +13,17 @@ import pytest
 
 pytest.importorskip("highway_env")
 
-from examples.b_eval.b1_cut_in import BANK, run  # noqa: E402
+from examples.b_eval.b1_cut_in import BANK, gap_ahead, run  # noqa: E402
 from examples.b_eval.b1_highway_brake import idm_driver  # noqa: E402
 from examples.b_eval.b1_scenarios import judge  # noqa: E402
 
 INF = math.inf
-# 预测秒数 -> 每道题 (撞没撞, 最小车距, 判定, 刹没刹)；最小车距 inf = 它的中心没进我的车道
+# 预测秒数 -> 每道题 (撞没撞, 最小车距, 判定, 刹没刹)；最小车距 inf = 它一直没在我前面压进我的车道；None = 不查
+# 2026-11-10 B4 修尺子：第 4 题（车身压进 0.8 米）以前量不到（inf），现在量得到：2.68 / 4.68 / 5.18 米（0.0 秒的 2.68 先由录像算出，实跑一致）
 EXPECTED = {
-    0.0: [(False, INF, "过", False), (False, 4.18, "险过", True), (True, None, "不过", True), (False, INF, "险过", True), (False, INF, "过", False)],
-    0.5: [(False, INF, "过", False), (False, 5.68, "险过", True), (False, 0.68, "险过", True), (False, INF, "险过", True), (False, INF, "过", False)],
-    1.0: [(False, INF, "过", False), (False, 6.18, "险过", True), (False, 1.18, "险过", True), (False, INF, "险过", True), (False, INF, "险过", True)],
+    0.0: [(False, INF, "过", False), (False, 4.18, "险过", True), (True, None, "不过", True), (False, 2.68, "险过", True), (False, INF, "过", False)],
+    0.5: [(False, INF, "过", False), (False, 5.68, "险过", True), (False, 0.68, "险过", True), (False, 4.68, "险过", True), (False, INF, "过", False)],
+    1.0: [(False, INF, "过", False), (False, 6.18, "险过", True), (False, 1.18, "险过", True), (False, 5.18, "险过", True), (False, INF, "险过", True)],
 }
 
 
@@ -74,3 +75,11 @@ def test_will_cross_constant_acceleration():
     assert will_cross(0.2, 1.0, -2.0, 1.5)             # 在减速：0.5 秒后横向停下，最多挪 0.25 米
     assert not will_cross(0.3, 1.0, -2.0, 1.5)         # （不截到停下那一刻的话，1.5 秒会算成往回挪 0.75 米）
     assert not will_cross(0.1, 0.0, -1.0, 1.0)         # 已经不朝我挪、还在往回减：不会压线
+
+
+def test_gap_ahead_only_counts_cars_ahead_in_my_lane():
+    """B4 修尺子：我在 (0, 4)。前后距离 = 中心差 − 5 米车长；只量在我前面、车身压进我车道（横向差 < 3 米）的车。"""
+    assert gap_ahead((0, 4), (15, 4)) == pytest.approx(10.0)       # 正前方
+    assert gap_ahead((0, 4), (15, 1.8)) == pytest.approx(10.0)     # 车身压进来 0.8 米（第 4 题）：以前按中心算量不到
+    assert math.isinf(gap_ahead((0, 4), (15, 0.8)))                # 车身离线 0.2 米（第 5 题）：不算
+    assert math.isinf(gap_ahead((0, 4), (-140, 4)))                # 在我后面：以前算出 −145 米

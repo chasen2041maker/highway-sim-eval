@@ -15,7 +15,7 @@ import sys
 from collections import deque
 import numpy as np
 
-from examples.b_eval.b1_highway_brake import DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, follow, idm_driver, pick_lead, score, to_action
+from examples.b_eval.b1_highway_brake import CAR_WIDTH_M, DT_S, MAX_BRAKE_MPS2, SIM_TIME_S, follow, idm_driver, pick_lead, score, to_action
 from examples.b_eval.b1_scenarios import judge
 from scenarios.cut_in import CAR_LENGTH_M, LANE_WIDTH_M, CutIn, build, cutter_lateral
 
@@ -31,6 +31,18 @@ BANK = [
 ]
 
 
+def gap_ahead(ego_xy, other_xy) -> float:
+    """考官的尺子：量“我车头到它车尾”的前后距离。只量两种都满足的车，否则 inf（= 不算）：
+      ① 它在我前面（它的中心在我的中心前面）；
+      ② 它的车身压进了我的车道（横向差 < 半个车道 + 半个车宽 = 3 米，和考生认前车的规矩一样）。
+    B4 修之前：按中心点判车道（车身压线 0.8 米的车量不到），也不管前后（被我超过、切到我后面的车算出 −140 米）。"""
+    dx = other_xy[0] - ego_xy[0]
+    dy = abs(other_xy[1] - ego_xy[1])
+    if dx <= 0 or dy >= LANE_WIDTH_M / 2 + CAR_WIDTH_M / 2:
+        return math.inf
+    return dx - CAR_LENGTH_M
+
+
 def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0, noise_y_m: float = 0.0, seed: int = 0, confirm_frames: int = 1, accel: bool = False,
         frames: list | None = None) -> dict:
     """考一道题：每 0.1 秒 看 → 想 → 动 → 世界走一步；它第 0 秒起按题目往我这边挪（带真的横向速度）。
@@ -38,7 +50,7 @@ def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 
     env, cutter = build(sc, DT_S, SIM_TIME_S, MAX_BRAKE_MPS2, show)
     world = env.unwrapped
     ego = world.vehicle
-    y_side, y_mine = cutter.position[1], ego.position[1]
+    y_side = cutter.position[1]
     rng = np.random.default_rng(seed)
 
     def sensor(o):
@@ -67,9 +79,8 @@ def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 
             cutter.heading = math.atan2(vd, sc.cut_speed_mps)                # 车头朝挪的方向，obs 里才有 vy
             cutter.speed = math.hypot(sc.cut_speed_mps, vd)                  # 往前的速度不变
             cutter.action = {"steering": 0.0, "acceleration": 0.0}
-            log["t"].append(t_s)                                            # 考官：只有它进了我的车道才算车距
-            in_my_lane = abs(cutter.position[1] - y_mine) < LANE_WIDTH_M / 2
-            log["gap"].append(cutter.position[0] - ego.position[0] - CAR_LENGTH_M if in_my_lane else math.inf)
+            log["t"].append(t_s)
+            log["gap"].append(gap_ahead(ego.position, cutter.position))     # 考官的尺子（B4 修过）
             log["ego_v"].append(ego.speed)
             log["lead_v"].append(sc.cut_speed_mps)
             log["accel"].append(action[0] * MAX_BRAKE_MPS2)
@@ -107,7 +118,7 @@ def main():
             cells.append(f"{judge(s):<3} {gap} {s['hardest_brake_mps2']:6.2f}")
         print(f"{n:<3} {sc.gap_m:>4.0f} {sc.ego_speed_mps:>4.0f} {sc.cut_speed_mps:>4.0f} {sc.cut_time_s:>6.0f} {sc.cut_depth_m:>7.1f}  |  "
               + "  ".join(cells))
-    print("每格：判定  最小车距（- = 它没进我的车道）  最猛刹车")
+    print("每格：判定  最小车距（- = 它一直没在我前面压进我的车道）  最猛刹车")
 
 
 if __name__ == "__main__":
