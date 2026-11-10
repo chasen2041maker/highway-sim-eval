@@ -109,16 +109,17 @@ def main():
         n, p = int(sys.argv[i + 1]), float(sys.argv[i + 2]) if len(sys.argv) > i + 2 else 0.0
         print(BANK[n - 1], f"预测 {p} 秒", run(BANK[n - 1], p, show=True))
         return
-    print("题  车距  我   它  几秒切  挪多远  |  " + "  ".join(f"预测 {p:.1f} 秒      " for p in PREDICT_S))
+    print("题  车距  我   它  几秒切  挪多远  |  " + "  ".join(f"预测 {p:.1f} 秒            " for p in PREDICT_S))
     for n, sc in enumerate(BANK, start=1):
         cells = []
         for p in PREDICT_S:
             s = run(sc, p)
             gap = "  -  " if math.isinf(s["min_gap_m"]) else f"{s['min_gap_m']:5.2f}"
-            cells.append(f"{judge(s):<3} {gap} {s['hardest_brake_mps2']:6.2f}")
+            ttc = "  撞 " if s["crashed"] else ("  -  " if math.isinf(s["min_ttc_s"]) else f"{s['min_ttc_s']:5.2f}")
+            cells.append(f"{judge(s):<3} {gap} {ttc} {s['hardest_brake_mps2']:6.2f}")
         print(f"{n:<3} {sc.gap_m:>4.0f} {sc.ego_speed_mps:>4.0f} {sc.cut_speed_mps:>4.0f} {sc.cut_time_s:>6.0f} {sc.cut_depth_m:>7.1f}  |  "
               + "  ".join(cells))
-    print("每格：判定  最小车距（- = 它一直没在我前面压进我的车道）  最猛刹车")
+    print("每格：判定  最小车距（- = 它一直没在我前面压进我的车道）  最小 TTC 秒（- = 没在接近它；撞 = 撞了）  最猛刹车")
 
 
 if __name__ == "__main__":
