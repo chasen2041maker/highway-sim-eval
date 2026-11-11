@@ -43,8 +43,15 @@ def gap_ahead(ego_xy, other_xy) -> float:
     return dx - CAR_LENGTH_M
 
 
+def limit_jerk(last_a: float, want_a: float, jerk_limit_mps3: float, dt: float = DT_S) -> float:
+    """B4 实验：这一帧想踩 want_a，可和上一帧 last_a 比，最多只能变 上限 × dt（急动度不超过上限）。
+    例：上限 10、每 0.1 秒：上一帧 0、想踩 −8 → 只能到 −1；上一帧 −8、想踩 +2.8 → 只能松到 −7。"""
+    step = jerk_limit_mps3 * dt
+    return last_a + max(-step, min(step, want_a - last_a))
+
+
 def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 0.0, noise_y_m: float = 0.0, seed: int = 0, confirm_frames: int = 1, accel: bool = False,
-        frames: list | None = None) -> dict:
+        frames: list | None = None, jerk_limit_mps3: float | None = None) -> dict:
     """考一道题：每 0.1 秒 看 → 想 → 动 → 世界走一步；它第 0 秒起按题目往我这边挪（带真的横向速度）。
     frames 给了一个空列表的话，每一帧往里录一条：考生看到了什么、真实世界怎样、考生做了什么（B3 录像 / 回灌用）。"""
     env, cutter = build(sc, DT_S, SIM_TIME_S, MAX_BRAKE_MPS2, show)
@@ -65,6 +72,7 @@ def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 
     crashed = False
     streak = 0                                                        # 连着几帧挑出了前车
     prev = None                                                       # 上一帧（算横向加速度用）
+    last_a = 0.0                                                      # 上一帧踩了多大（急动度上限用）
     try:
         for k in range(round(SIM_TIME_S / DT_S)):
             t_s = k * DT_S
@@ -74,6 +82,10 @@ def run(sc: CutIn, predict_s: float = 0.0, show: bool = False, delay_s: float = 
             if streak < confirm_frames:                                        # 防噪声：没连续够几帧，就当没看见
                 lead = None
             action = to_action(follow(late[0], lead), ego.speed)               # ② 算刹车
+            if jerk_limit_mps3 is not None:                                    # B4 实验：踩的深浅每 0.1 秒最多变 上限 × 0.1
+                a = max(limit_jerk(last_a, action[0] * MAX_BRAKE_MPS2, jerk_limit_mps3), -ego.speed / DT_S)   # 快停住时照样别倒车
+                action = [a / MAX_BRAKE_MPS2]
+            last_a = action[0] * MAX_BRAKE_MPS2
             d, vd = cutter_lateral(sc, t_s)                                  # 剧本：它往我这边挪 d 米，横向速度 vd
             cutter.position[1] = y_side + d
             cutter.heading = math.atan2(vd, sc.cut_speed_mps)                # 车头朝挪的方向，obs 里才有 vy

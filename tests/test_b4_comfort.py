@@ -2,6 +2,7 @@
 
 import pytest
 
+from examples.b_eval.b1_cut_in import limit_jerk
 from examples.b_eval.b1_highway_brake import score
 
 
@@ -27,3 +28,14 @@ def test_slow_ramp_is_gentle():
 
 def test_no_braking_no_jerk():
     assert score(_log([0.0] * 10), False)["max_jerk_mps3"] == pytest.approx(0.0)
+
+
+def test_limit_jerk_spreads_a_slam_over_several_steps():
+    """上限 10 m/s³、每 0.1 秒最多变 1：想一脚踩到 −8，只能先到 −1；急刹后想马上踩油门 +2.8，只能松到 −7。"""
+    assert limit_jerk(0.0, -8.0, 10.0) == pytest.approx(-1.0)
+    assert limit_jerk(-8.0, 2.8, 10.0) == pytest.approx(-7.0)
+    assert limit_jerk(-3.0, -3.5, 10.0) == pytest.approx(-3.5)     # 只差 0.5，没超上限，照踩
+    a, steps = 0.0, 0
+    while a > -8.0 + 1e-9:
+        a, steps = limit_jerk(a, -8.0, 10.0), steps + 1
+    assert steps == 8                                               # 0.8 秒才踩到 −8
