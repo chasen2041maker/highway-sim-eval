@@ -222,7 +222,7 @@ function drawRoad(svg, r, tt) {
   const off = ((x0 * S) % 144 + 144) % 144;
   for (const yy of [2, 6]) s += `<line class="dash" x1="0" x2="${W}" y1="${Y(yy)}" y2="${Y(yy)}" stroke-dasharray="48 96" stroke-dashoffset="${off}"/>`;
   for (let m = Math.ceil(x0 / 10) * 10; m <= x0 + W / S; m += 10)
-    s += `<line class="tick" x1="${X(m)}" x2="${X(m)}" y1="${Y(10)}" y2="${Y(10) + 6}"/><text class="ax" x="${X(m)}" y="${Y(10) + 18}" text-anchor="middle">${m} m</text>`;
+    if (X(m) > 24 && X(m) < W - 24) s += `<line class="tick" x1="${X(m)}" x2="${X(m)}" y1="${Y(10)}" y2="${Y(10) + 6}"/><text class="ax" x="${X(m)}" y="${Y(10) + 18}" text-anchor="middle">${m} m</text>`;
   s += `<text class="lbl muted" x="8" y="${Y(0) + 4}">旁边车道</text><text class="lbl muted" x="8" y="${Y(4) + 4}">我的车道</text>`;
   if (r.lead[i]) s += `<line class="seen" x1="${X(ex + CAR_L / 2)}" y1="${Y(ey)}" x2="${X(cx - CAR_L / 2)}" y2="${Y(cy)}"/>`;
   const inside = cy + CAR_W / 2 - 2 > 0;
@@ -239,7 +239,7 @@ function drawRoad(svg, r, tt) {
 
 function head(el, it, v, cls, st) {
   const r = runOf(it, v), lvName = v === DATA.old ? it.old : it.new;
-  const ended = r.crashed ? `，${r.t.at(-1).toFixed(1)} 秒撞上` : "";
+  const ended = r.crashed ? ` · ${r.t.at(-1).toFixed(1)} 秒撞上` : "";
   const front = st.dx >= 0 ? `它在我前面 ${st.dx.toFixed(1)} 米` : `它在我后面 ${(-st.dx).toFixed(1)} 米`;
   const side = st.side > 0 ? `车身压进我车道 ${st.side.toFixed(2)} 米` : `车身离我车道线 ${(-st.side).toFixed(2)} 米`;
   el.innerHTML = `<span class="sw ${cls}"></span><b>${v}</b>${pill(lvName)}<span class="read">车速 ${st.v.toFixed(1)} · ${front} · ${side} · 踩 ${st.a.toFixed(1)}${ended}</span>`;
