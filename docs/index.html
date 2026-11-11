@@ -95,6 +95,7 @@ footer { color: var(--muted); font-size: 13px; }
     <div class="grid">
       <a class="card" href="b1_update_order.html"><span class="n">B1</span><span class="t">Same driver, two simulators: move first or slow down first</span><span class="zh">先挪还是先减速</span><span class="d">Lead car brakes to a stop: the update order puts it at 9.5 m (A4) vs 10.5 m (HighwayEnv), true 10.0 m; my hardest brake −3.69 vs −3.44.</span></a>
       <a class="card" href="b3_replay.html"><span class="n">B3</span><span class="t">Cut-in recordings, replayed</span><span class="zh">加塞录像回放</span><span class="d">Five recorded cut-ins top-down, with the decisions of drivers looking 0.5 s and 1.0 s ahead replayed frame by frame: first brake 0.8 → 0.5 / 0.4 s; looking 1.0 s ahead false-brakes on the car that stops 0.2 m outside my lane. Faded curves mark where open-loop replay stops being trustworthy.</span></a>
+      <a class="card" href="b5_regression_report.html"><span class="n">B5</span><span class="t">Regression report: v1 → v2</span><span class="zh">回归报告</span><span class="d">Two driver versions on the same 200 unseen cut-ins × 4 road conditions: 79 pairs better, 60 worse, 2 new crashes. Every changed question replayed side by side; in question 25 braking early leaves the car alongside a slow car that then cuts into it.</span></a>
     </div>
   </section>
 
