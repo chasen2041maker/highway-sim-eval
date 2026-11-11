@@ -85,7 +85,7 @@ The project is built to answer:
 | Metrics | Front gap (cars ahead whose body is in my lane), minimum TTC, maximum jerk; 95% Wilson intervals; settings picked on tuning questions and scored on unseen ones | Most urgent ≠ closest (TTC 0.9 s at 4.5 m vs 2.68 m later); 50-question conclusions flip at 1,000 | Done (route completion and driving score with CARLA) |
 | Regression report | Two versions on the same unseen questions and noise; paired question by question, worse / better / same by outcome level; HTML report with side-by-side replays of every changed pair | v1 → v2: 79 better, 60 worse, 2 new crashes, each one replayable | Done |
 
-153 Python unit tests and 21 C++ tests (googletest), with expected values worked out by hand, run by GitHub Actions on every push.
+197 Python unit tests and 21 C++ tests (googletest), with expected values worked out by hand, run by GitHub Actions on every push.
 
 ## Architecture
 
