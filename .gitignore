@@ -6,3 +6,4 @@ outputs/
 .vscode/
 .DS_Store
 cpp/build/
+data/
