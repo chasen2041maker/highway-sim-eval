@@ -42,6 +42,8 @@ def run_job(job: Job) -> dict:
         "crashed": bool(s["crashed"]),
         "min_gap_m": float(s["min_gap_m"]),
         "hardest_brake_mps2": float(s["hardest_brake_mps2"]),
+        "min_ttc_s": float(s["min_ttc_s"]),                          # B4 加：还有几秒撞上（最小）
+        "max_jerk_mps3": float(s["max_jerk_mps3"]),                  # B4 加：刹得多急（最大急动度）
         "missed": bool(job.comes_in and s["crashed"] and avoidable(job.scenario)),
         "false_brake": bool(not job.comes_in and s["hardest_brake_mps2"] < -0.5),
     }
