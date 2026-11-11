@@ -1,0 +1,219 @@
+<title>nuScenes 一个时刻</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: one real front-camera photo with projected 3D boxes on a shared time scrubber; below it a top-down view in "my" coordinates and the table chain for the selected box. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --veh: #1e66d6; --hum: #d2501f; --cyc: #6a5fd0; --oth: #8a8f96; --sel: #f0b000; --key: #fff3c4; --keyink: #6b4e00;
+  --asphalt: #dde2e7; --mylane: #e3edfb;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --veh: #62a6ff; --hum: #ff8a5c; --cyc: #a59cff; --oth: #9aa0a6; --sel: #ffd24d; --key: #3a3014; --keyink: #ffe08a;
+    --asphalt: #26303a; --mylane: #1b2c44; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --veh: #62a6ff; --hum: #ff8a5c; --cyc: #a59cff; --oth: #9aa0a6; --sel: #ffd24d; --key: #3a3014; --keyink: #ffe08a;
+  --asphalt: #26303a; --mylane: #1b2c44; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 80ch; }
+.lede b { color: var(--ink); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+svg { display: block; width: 100%; height: auto; }
+button { font: 500 13px var(--font-body); color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button[aria-pressed="true"] { background: var(--veh); border-color: var(--veh); color: var(--surface); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--veh); outline-offset: 2px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+input[type="range"] { flex: 1 1 200px; min-width: 0; accent-color: var(--veh); }
+.tnow { font: 600 13px var(--font-num); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; border: 2px solid; }
+.below { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 14px; }
+@media (max-width: 860px) { .below { grid-template-columns: minmax(0, 1fr); } }
+.chain { display: grid; gap: 6px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--chip); transition: background .25s, border-color .25s, opacity .25s; }
+.card.dim { opacity: .45; }
+.card.on { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel) inset; opacity: 1; }
+.card .h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.card .h b { font-size: 14px; }
+.card .h code { font: 12px var(--font-num); color: var(--muted); }
+.card .b { font-size: 13px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.card .b .num { font-family: var(--font-num); color: var(--ink); }
+.key { background: var(--key); color: var(--keyink); border-radius: 4px; padding: 0 4px; font-family: var(--font-num); font-size: 12px; }
+.down { text-align: center; color: var(--muted); font-size: 12px; line-height: 1; }
+.note { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.src { font-size: 12px; color: var(--muted); }
+.lbl { font: 600 13px var(--font-body); fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.ax { font: 400 13px var(--font-num); fill: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>nuScenes 里的一个时刻</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <section class="panel" aria-label="前视照片">
+    <div class="bar">
+      <button id="play" type="button">▶ 播放</button>
+      <input id="scrub" type="range" min="0" max="38" step="1" value="10" aria-label="第几个关键帧">
+      <span class="tnow" id="tnow"></span>
+      <button id="only" type="button" aria-pressed="true">只看车和人</button>
+    </div>
+    <svg id="photo" viewBox="0 0 800 450" role="img" aria-label="前视相机照片和 3D 框" style="margin-top:8px;border-radius:6px"></svg>
+    <div class="legend">
+      <span><span class="sw" style="border-color:var(--veh)"></span>车</span>
+      <span><span class="sw" style="border-color:var(--hum)"></span>人</span>
+      <span><span class="sw" style="border-color:var(--cyc)"></span>自行车、摩托车</span>
+      <span><span class="sw" style="border-color:var(--oth)"></span>隔离栏、锥桶等</span>
+      <span><span class="sw" style="border-color:var(--sel);background:var(--sel)"></span>选中的那个（播放时一直跟着它）</span>
+    </div>
+    <p class="note">点照片上任意一个框。每 0.5 秒一个关键帧，照片缩小了一半。</p>
+  </section>
+
+  <div class="below">
+    <section class="panel" aria-label="俯视图">
+      <h2>同一时刻，从天上往下看（我的坐标）</h2>
+      <svg id="top" viewBox="0 0 520 440" role="img" aria-label="俯视图：我在下方中间，车头朝上"></svg>
+      <p class="note">我在下方中间、车头朝上；浅蓝条是我的车道（左右各 1.75 米）。每格 10 米。</p>
+    </section>
+    <section class="panel" aria-label="沿着表一路查">
+      <div class="bar" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">这个框，沿着表一路查下去</h2><button id="walk" type="button">▶ 一步步查</button></div>
+      <div class="chain" id="chain"></div>
+    </section>
+  </div>
+
+  <p class="src">数据：nuScenes mini（Motional，CC BY-NC-SA 4.0），仅供个人学习。框由 sample_annotation 的 3D 框经 ego_pose、calibrated_sensor 换算后投到照片上。</p>
+</div>
+
+<script>
+const D = __DATA__;
+const COL = { vehicle: "var(--veh)", human: "var(--hum)", cycle: "var(--cyc)", other: "var(--oth)" };
+const EDGES = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+const $ = id => document.getElementById(id);
+let k = 10, sel = null, only = true, playing = false, timer = null, walkTimer = null, step = 99;
+
+function pickDefault() {
+  const f = D.frames[k];
+  const cands = f.anns.filter(a => a.uv && a.g === "human" && a.ex > 0 && Math.abs(a.ey) < 3).sort((a, b) => a.ex - b.ex);
+  const any = f.anns.filter(a => a.uv && a.g !== "other").sort((a, b) => a.ex - b.ex);
+  return (cands[0] || any[0] || {}).id || null;
+}
+
+function lede() {
+  $("lede").innerHTML = `<b>${D.scene}</b>，${D.location === "singapore-onenorth" ? "新加坡 one-north" : D.location}，${D.date}。人写的描述：“${D.desc}”。` +
+    `一共 ${D.frames.length} 个关键帧（约 ${D.frames.at(-1).t.toFixed(0)} 秒）。`;
+}
+
+function drawPhoto() {
+  const f = D.frames[k];
+  let s = `<image href="data:image/jpeg;base64,${f.img}" x="0" y="0" width="800" height="450"/>`;
+  const list = f.anns.filter(a => a.uv && (!only || a.g !== "other"));
+  const order = list.filter(a => a.id !== sel).concat(list.filter(a => a.id === sel));
+  for (const a of order) {
+    const on = a.id === sel, c = on ? "var(--sel)" : COL[a.g];
+    const d = EDGES.map(([i, j]) => `M${a.uv[i][0]} ${a.uv[i][1]}L${a.uv[j][0]} ${a.uv[j][1]}`).join("");
+    const xs = a.uv.map(p => p[0]), ys = a.uv.map(p => p[1]);
+    const x0 = Math.max(0, Math.min(...xs)), x1 = Math.min(800, Math.max(...xs)), y0 = Math.max(0, Math.min(...ys)), y1 = Math.min(450, Math.max(...ys));
+    s += `<path d="${d}" fill="none" stroke="${c}" stroke-width="${on ? 3 : 1.4}" opacity="${sel && !on ? .55 : 1}"/>`;
+    s += `<rect data-id="${a.id}" x="${x0}" y="${y0}" width="${Math.max(6, x1 - x0)}" height="${Math.max(6, y1 - y0)}" fill="transparent" style="cursor:pointer"><title>${a.zh}</title></rect>`;
+    if (on) s += `<text class="lbl" x="${(x0 + x1) / 2}" y="${Math.max(16, y0 - 8)}" text-anchor="middle">${a.zh}</text>`;
+  }
+  $("photo").innerHTML = s;
+  $("photo").querySelectorAll("rect[data-id]").forEach(r => r.addEventListener("click", e => { e.stopPropagation(); select(r.dataset.id); }));
+}
+
+function drawTop() {
+  const f = D.frames[k], S = 4.4, cx = 260, cy = 380;
+  const X = (ex, ey) => [cx - ey * S, cy - ex * S];
+  let s = `<rect x="0" y="0" width="520" height="440" fill="var(--asphalt)" rx="6"/>`;
+  s += `<rect x="${cx - 1.75 * S}" y="0" width="${3.5 * S}" height="${cy}" fill="var(--mylane)"/>`;
+  for (let m = 10; m <= 80; m += 10) { const y = cy - m * S; if (y > 8) s += `<line x1="0" x2="520" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text class="ax" x="6" y="${y - 3}">${m} m</text>`; }
+  for (const a of f.anns) {
+    if (only && a.g === "other") continue;
+    const [x, y] = X(a.ex, a.ey);
+    if (x < -20 || x > 540 || y < -20 || y > 460) continue;
+    const on = a.id === sel;
+    s += `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(-(a.eyaw) + 0).toFixed(1)})" style="cursor:pointer" data-id="${a.id}">` +
+         `<rect x="${(-a.w * S / 2).toFixed(1)}" y="${(-a.l * S / 2).toFixed(1)}" width="${Math.max(3, a.w * S).toFixed(1)}" height="${Math.max(3, a.l * S).toFixed(1)}" rx="1.5" ` +
+         `fill="${on ? "var(--sel)" : COL[a.g]}" opacity="${on ? 1 : (a.uv ? .85 : .35)}" stroke="${on ? "var(--ink)" : "none"}" stroke-width="1"/></g>`;
+  }
+  s += `<polygon points="${cx},${cy - 10} ${cx + 7},${cy + 9} ${cx - 7},${cy + 9}" fill="var(--ink)"/><text class="lbl" x="${cx}" y="${cy + 30}" text-anchor="middle">我</text>`;
+  const a = f.anns.find(a => a.id === sel);
+  if (a) { const [x, y] = X(a.ex, a.ey); s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--sel)" stroke-width="1.5" stroke-dasharray="5 4"/><circle cx="${x}" cy="${y}" r="11" fill="none" stroke="var(--sel)" stroke-width="2.5"/>`; }
+  $("top").innerHTML = s;
+  $("top").querySelectorAll("g[data-id]").forEach(g => g.addEventListener("click", () => select(g.dataset.id)));
+}
+
+function chain() {
+  const f = D.frames[k], a = f.anns.find(x => x.id === sel);
+  if (!a) { $("chain").innerHTML = `<p class="note">这一帧没有它的框（可能被挡住或走出范围）。点照片上别的框试试。</p>`; return; }
+  const side = a.ey >= 0 ? `左边 ${a.ey.toFixed(1)}` : `右边 ${(-a.ey).toFixed(1)}`;
+  const inLane = a.ex > 0 && Math.abs(a.ey) < 1.75 + a.w / 2;
+  const cards = [
+    ["照片", "sample_data", `前视相机的一张图：<span class="num">${f.file}</span><br>这一行写着 <span class="key">sample_token = ${f.sample}…</span>`],
+    ["这一刻（关键帧）", "sample", `编号 <span class="key">${f.sample}…</span>，这段的第 ${k + 1} 个、第 ${f.t.toFixed(1)} 秒；同一刻我的车在地图上 (<span class="num">${f.ego[0]}, ${f.ego[1]}</span>)，车头朝 ${f.eyaw}°（ego_pose）`],
+    ["这一刻的一个框", "sample_annotation", `编号 <span class="num">${a.tok}…</span>，写着 <span class="key">sample_token = ${f.sample}…</span>（属于这一刻）；地图坐标 (<span class="num">${a.xy[0]}, ${a.xy[1]}</span>)，宽 ${a.w.toFixed(2)} × 长 ${a.l.toFixed(2)} 米；还写着 <span class="key">instance_token = ${a.inst}…</span>`],
+    ["这是谁", "instance", `编号 <span class="key">${a.inst}…</span>：同一个东西，这一段里一共被标了 <span class="num">${a.n_inst}</span> 次，每一帧的框都指向它；写着 <span class="key">category_token = ${a.cat_tok}…</span>`],
+    ["这是什么", "category", `<span class="key">${a.cat_tok}…</span> = <span class="num">${a.cat}</span>，也就是<b style="color:var(--ink)">${a.zh}</b>${a.attr.length ? `；状态：${a.attr.join("、")}` : ""}；能看见的部分：${a.vis}`],
+    ["换算成我的坐标", "ego_pose 换算", `前方 <span class="num">${a.ex.toFixed(1)}</span> 米、${side} 米${inLane ? "，<b style=\"color:var(--ink)\">在我的车道里</b>" : ""}`],
+  ];
+  $("chain").innerHTML = cards.map(([t, tb, b], i) =>
+    (i ? `<div class="down">↓ 拿着黄色的编号去下一张表找</div>` : "") +
+    `<div class="card${i < step ? " on" : step < 99 ? " dim" : ""}" data-i="${i}"><div class="h"><b>${t}</b><code>${tb}</code></div><div class="b">${b}</div></div>`).join("");
+}
+
+function render() {
+  const f = D.frames[k];
+  $("scrub").value = k;
+  $("tnow").textContent = `第 ${k + 1} / ${D.frames.length} 帧 · ${f.t.toFixed(1)} 秒 · 我的车速 ${f.v.toFixed(1)} m/s`;
+  drawPhoto(); drawTop(); chain();
+}
+function select(id) { sel = id; stopWalk(); step = 99; render(); }
+function stop() { playing = false; clearInterval(timer); $("play").textContent = "▶ 播放"; }
+$("play").addEventListener("click", () => {
+  if (playing) { stop(); return; }
+  if (k >= D.frames.length - 1) k = 0;
+  playing = true; $("play").textContent = "❚❚ 暂停";
+  timer = setInterval(() => { if (k >= D.frames.length - 1) { stop(); return; } k++; render(); }, 500);
+});
+$("scrub").addEventListener("input", e => { stop(); k = +e.target.value; render(); });
+$("only").addEventListener("click", () => { only = !only; $("only").setAttribute("aria-pressed", only); render(); });
+function stopWalk() { clearInterval(walkTimer); walkTimer = null; $("walk").textContent = "▶ 一步步查"; }
+$("walk").addEventListener("click", () => {
+  if (walkTimer) { stopWalk(); step = 99; chain(); return; }
+  stop(); step = 0; chain(); $("walk").textContent = "■ 停";
+  walkTimer = setInterval(() => { step++; chain(); if (step >= 6) { stopWalk(); } }, 900);
+});
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+  if (e.key === "ArrowRight" && k < D.frames.length - 1) { stop(); k++; render(); }
+  if (e.key === "ArrowLeft" && k > 0) { stop(); k--; render(); }
+  if (e.key === " ") { e.preventDefault(); $("play").click(); }
+});
+$("scrub").max = D.frames.length - 1;
+k = Math.min(10, D.frames.length - 1);
+sel = pickDefault();
+lede(); render();
+</script>
