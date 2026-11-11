@@ -143,13 +143,17 @@ def run(show: bool = False) -> dict:
 
 # ---------- ⑤ 阅卷：只看运行记录 ----------
 def score(log: dict, crashed: bool) -> dict:
-    """最小车距、最猛刹车、最小 TTC（还有几秒撞上）、撞没撞。"""
+    """最小车距、最猛刹车、最小 TTC（还有几秒撞上）、最大急动度、撞没撞。
+    急动度（B4 第 3 步）= 加速度每秒变多少（m/s³）：0.1 秒里从 0 踩到 −8，就是 80（乘客往前一栽）。"""
     ttcs = [g / (ev - lv) for g, ev, lv in zip(log["gap"], log["ego_v"], log["lead_v"]) if ev - lv > 0.1]
+    a = log["accel"]
+    jerks = [abs(a[k] - a[k - 1]) / DT_S for k in range(1, len(a))]
     i = log["gap"].index(min(log["gap"]))
     j = log["accel"].index(min(log["accel"]))
     return {"min_gap_m": log["gap"][i], "at_s": log["t"][i], "hardest_brake_mps2": min(log["accel"]),
             "brake_at_s": log["t"][j],              # 新加：那一步是第几秒
-            "min_ttc_s": min(ttcs) if ttcs else float("inf"), "crashed": crashed}
+            "min_ttc_s": min(ttcs) if ttcs else float("inf"),
+            "max_jerk_mps3": max(jerks) if jerks else 0.0, "crashed": crashed}
 
 
 def main():
