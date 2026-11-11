@@ -140,7 +140,7 @@ input[type="range"] { flex: 1 1 220px; min-width: 0; accent-color: var(--ego); }
       <div class="rdhead" id="hNew"></div>
       <svg id="roadNew" viewBox="0 0 960 236" role="img" aria-label="新版本俯视回放"></svg>
       <svg id="chart" viewBox="0 0 960 360" role="img" aria-label="两个版本的车速和踩多大"></svg>
-      <p class="note">蓝车是我，灰车是加塞车；灰车车身压过我的车道线时描橙边；我的车尾亮红灯 = 在踩刹车；蓝色虚线 = 考生此刻把它当前车。两条路各自跟着自己的车走。只放前 5 秒。</p>
+      <p class="note">蓝车是我，灰车是加塞车；灰车车身压过我的车道线时描橙边；我的车尾亮红灯 = 在踩刹车；蓝色虚线 = 考生此刻把它当前车。两条路各自跟着自己的车走。灰车按它的行驶方向画，切进来时车头会朝我这边偏一点。撞车的那一题，最后一帧是撞上前的那一刻（真正碰上发生在接下来的 0.1 秒里）。只放前 5 秒。</p>
     </section>
   </div>
 </div>
@@ -226,7 +226,9 @@ function drawRoad(svg, r, tt) {
   s += `<text class="lbl muted" x="8" y="${Y(0) + 4}">旁边车道</text><text class="lbl muted" x="8" y="${Y(4) + 4}">我的车道</text>`;
   if (r.lead[i]) s += `<line class="seen" x1="${X(ex + CAR_L / 2)}" y1="${Y(ey)}" x2="${X(cx - CAR_L / 2)}" y2="${Y(cy)}"/>`;
   const inside = cy + CAR_W / 2 - 2 > 0;
-  s += `<rect class="c-cut${inside ? " in" : ""}" x="${X(cx - CAR_L / 2)}" y="${Y(cy - CAR_W / 2)}" width="${CAR_L * S}" height="${CAR_W * S}" rx="4"/>`;
+  const p = Math.max(0, Math.min(i, r.t.length - 2));                       // 它的车头朝向：用相邻两帧的位置算
+  const ang = r.t.length > 1 ? Math.atan2(r.cy[p + 1] - r.cy[p], r.cx[p + 1] - r.cx[p]) * 180 / Math.PI : 0;
+  s += `<rect class="c-cut${inside ? " in" : ""}" x="${X(cx - CAR_L / 2)}" y="${Y(cy - CAR_W / 2)}" width="${CAR_L * S}" height="${CAR_W * S}" rx="4" transform="rotate(${ang.toFixed(2)} ${X(cx)} ${Y(cy)})"/>`;
   s += `<rect class="c-ego" x="${X(ex - CAR_L / 2)}" y="${Y(ey - CAR_W / 2)}" width="${CAR_L * S}" height="${CAR_W * S}" rx="4"/>`;
   if (r.a[i] < BRAKE) {
     s += `<rect class="blight" x="${X(ex - CAR_L / 2) - 2}" y="${Y(ey - CAR_W / 2) + 2}" width="5" height="8" rx="1"/>`;
