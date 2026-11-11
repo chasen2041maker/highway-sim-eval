@@ -1,0 +1,318 @@
+<title>回归报告 __TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* Layout: summary (counts + how things moved) on top; below, the list of changed questions on the left and the selected
+   question on the right: two top-down roads (old above, new below) on one shared time scrubber, then speed and brake charts. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #1b222a; --muted: #5b6672; --line: #d5dce3; --chip: #f5f7f9;
+  --asphalt: #dde2e7; --mylane: #e3edfb; --ego: #1e66d6; --cut: #6b7682; --intrude: #e8a33a; --light: #ff2a2a;
+  --old: #1e66d6; --new: #d98a14;
+  --lv3: #c62f2f; --lv2: #c27508; --lv1: #8a6d00; --lv0: #23875a; --lv3-soft: #fbe4e4; --lv2-soft: #fdf0dc; --lv1-soft: #f6f0d2; --lv0-soft: #e2f3ea;
+  --font-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+    --asphalt: #26303a; --mylane: #1b2c44; --ego: #62a6ff; --cut: #a7b1bc; --intrude: #f0b54f; --light: #ff5a5a;
+    --old: #62a6ff; --new: #f0b54f;
+    --lv3: #ff7b7b; --lv2: #f0b54f; --lv1: #e3cf6a; --lv0: #4cc38a; --lv3-soft: #3a1f22; --lv2-soft: #3a2c17; --lv1-soft: #33301a; --lv0-soft: #17332a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #182029; --ink: #e5eaf0; --muted: #9aa5b1; --line: #2a343e; --chip: #1f2832;
+  --asphalt: #26303a; --mylane: #1b2c44; --ego: #62a6ff; --cut: #a7b1bc; --intrude: #f0b54f; --light: #ff5a5a;
+  --old: #62a6ff; --new: #f0b54f;
+  --lv3: #ff7b7b; --lv2: #f0b54f; --lv1: #e3cf6a; --lv0: #4cc38a; --lv3-soft: #3a1f22; --lv2-soft: #3a2c17; --lv1-soft: #33301a; --lv0-soft: #17332a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 16px; }
+h1 { font-size: 24px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0 0 8px; text-wrap: balance; }
+.lede { margin: 4px 0 0; color: var(--muted); max-width: 80ch; }
+.lede b { color: var(--ink); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+svg { display: block; width: 100%; height: auto; }
+button { font: 500 13px var(--font-body); color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--ego); outline-offset: 2px; }
+.sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .sum { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { border-radius: 8px; padding: 8px 12px; background: var(--chip); border: 1px solid var(--line); }
+.stat .l { display: block; font-size: 13px; color: var(--muted); }
+.stat .v { font: 600 26px var(--font-num); font-variant-numeric: tabular-nums; }
+.stat.worse .v { color: var(--lv3); } .stat.better .v { color: var(--lv0); }
+.moves { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.mv { font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--chip); }
+.mv b { font-family: var(--font-num); margin-left: 6px; }
+.main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.tabs button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.list { display: grid; gap: 4px; max-height: 640px; overflow-y: auto; padding-right: 4px; }
+@media (max-width: 900px) { .list { max-height: 260px; } }
+.item { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; text-align: left; padding: 6px 8px; background: transparent; border: 1px solid transparent; }
+.item[aria-current="true"] { background: var(--chip); border-color: var(--line); }
+.item .q { font: 600 13px var(--font-num); grid-row: span 2; align-self: center; min-width: 44px; }
+.item .rd { font-size: 12px; color: var(--muted); }
+.lv { display: inline-block; font-size: 12px; padding: 0 7px; border-radius: 999px; font-weight: 500; }
+.lv3 { color: var(--lv3); background: var(--lv3-soft); } .lv2 { color: var(--lv2); background: var(--lv2-soft); }
+.lv1 { color: var(--lv1); background: var(--lv1-soft); } .lv0 { color: var(--lv0); background: var(--lv0-soft); }
+.arrow { color: var(--muted); margin: 0 4px; }
+.dhead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.dhead .desc { color: var(--muted); font-size: 14px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+input[type="range"] { flex: 1 1 220px; min-width: 0; accent-color: var(--ego); }
+.tnow { font: 600 14px var(--font-num); min-width: 64px; font-variant-numeric: tabular-nums; }
+.speeds { display: flex; gap: 4px; }
+.speeds button { padding: 4px 8px; font-family: var(--font-num); }
+.speeds button[aria-pressed="true"] { background: var(--ego); border-color: var(--ego); color: var(--surface); }
+.rdhead { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 14px; margin-top: 6px; }
+.sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; }
+.sw.old { background: var(--old); } .sw.new { background: var(--new); }
+.rdhead .read { font-family: var(--font-num); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+/* svg */
+.road { fill: var(--asphalt); } .mylane { fill: var(--mylane); }
+.edge { stroke: var(--muted); stroke-width: 2; } .dash { stroke: var(--surface); stroke-width: 3; }
+.tick { stroke: var(--muted); stroke-width: 1; }
+.c-ego { fill: var(--ego); } .c-cut { fill: var(--cut); } .c-cut.in { stroke: var(--intrude); stroke-width: 3; }
+.blight { fill: var(--light); }
+.seen { stroke: var(--ego); stroke-width: 2; stroke-dasharray: 5 4; fill: none; }
+.lbl { font: 500 13px var(--font-body); fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.lbl.muted { fill: var(--muted); font-size: 12px; }
+.lbl.crash { fill: var(--light); font-weight: 700; font-size: 15px; }
+.ax { font: 400 11px var(--font-num); fill: var(--muted); }
+.grid { stroke: var(--line); stroke-width: 1; } .zero { stroke: var(--muted); stroke-width: 1; }
+.ln { fill: none; stroke-width: 2.5; stroke-linejoin: round; }
+.ln.old { stroke: var(--old); } .ln.new { stroke: var(--new); stroke-dasharray: 7 4; }
+.ph { stroke: var(--ink); stroke-width: 1.5; }
+.xmark { stroke: var(--light); stroke-width: 2.5; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="title">回归报告</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <section class="panel" aria-label="总账">
+    <div class="sum" id="sum"></div>
+    <div class="moves" id="moves"></div>
+  </section>
+
+  <div class="main">
+    <section class="panel" aria-label="有变化的题">
+      <div class="tabs" role="group" aria-label="只看">
+        <button type="button" data-f="变差" aria-pressed="true">变差</button>
+        <button type="button" data-f="变好" aria-pressed="false">变好</button>
+      </div>
+      <div class="list" id="list"></div>
+    </section>
+
+    <section class="panel" aria-label="这一道题">
+      <div class="dhead"><h2 id="dtitle" style="margin:0"></h2><span class="desc" id="ddesc"></span></div>
+      <div class="bar">
+        <button id="play" type="button">▶ 播放</button>
+        <input id="scrub" type="range" min="0" max="50" step="1" value="0" aria-label="时间">
+        <span class="tnow" id="tnow">0.0 s</span>
+        <span class="speeds" role="group" aria-label="播放速度">
+          <button type="button" data-sp="0.25" aria-pressed="false">0.25×</button>
+          <button type="button" data-sp="0.5" aria-pressed="true">0.5×</button>
+          <button type="button" data-sp="1" aria-pressed="false">1×</button>
+        </span>
+      </div>
+      <div class="rdhead" id="hOld"></div>
+      <svg id="roadOld" viewBox="0 0 960 236" role="img" aria-label="旧版本俯视回放"></svg>
+      <div class="rdhead" id="hNew"></div>
+      <svg id="roadNew" viewBox="0 0 960 236" role="img" aria-label="新版本俯视回放"></svg>
+      <svg id="chart" viewBox="0 0 960 360" role="img" aria-label="两个版本的车速和踩多大"></svg>
+      <p class="note">蓝车是我，灰车是加塞车；灰车车身压过我的车道线时描橙边；我的车尾亮红灯 = 在踩刹车；蓝色虚线 = 考生此刻把它当前车。两条路各自跟着自己的车走。只放前 5 秒。</p>
+    </section>
+  </div>
+</div>
+
+<script>
+const DATA = __DATA__;
+const DT = 0.1, CAR_L = 5, CAR_W = 2, BRAKE = -0.5, T_MAX = 5.0;
+const LV = { "撞了": 3, "误刹": 2, "险": 1, "正常": 0 };
+const $ = id => document.getElementById(id);
+let filter = "变差", sel = 0, t = 0, playing = false, speed = 0.5, last = null;
+
+const items = () => DATA.items.filter(it => it.change === filter);
+const cur = () => items()[sel];
+const runOf = (it, v) => it.runs[v];
+const tEnd = it => Math.max(...[DATA.old, DATA.new].map(v => runOf(it, v).t.at(-1)));
+const knobs = v => { const k = DATA.versions[v]; return `往前看 ${k.predict_s} 秒、确认 ${k.confirm_frames} 帧、${k.accel ? "匀加速" : "匀速"}预测`; };
+const roadName = it => `噪声 ${it.noise.toFixed(1)} 米、延迟 ${it.delay.toFixed(1)} 秒`;
+const pill = name => `<span class="lv lv${LV[name]}">${name}</span>`;
+
+function lerp(r, key, tt) {
+  const n = r.t.length, f = Math.min(tt, r.t[n - 1]) / DT;
+  const i = Math.min(n - 1, Math.floor(f + 1e-9)), j = Math.min(n - 1, i + 1), w = f - i;
+  return r[key][i] + (r[key][j] - r[key][i]) * Math.max(0, Math.min(1, w));
+}
+const idx = (r, tt) => Math.min(r.t.length - 1, Math.max(0, Math.floor(tt / DT + 1e-6)));
+
+/* ---------- top ---------- */
+function header() {
+  $("title").textContent = `回归报告：${DATA.old} → ${DATA.new}`;
+  $("lede").innerHTML = `<b>${DATA.old}</b>：${knobs(DATA.old)}；<b>${DATA.new}</b>：${knobs(DATA.new)}。` +
+    `考试题：种子 ${DATA.exam.seed} 的 ${DATA.exam.n} 道新题 × ${DATA.exam.roads.length} 种路况，两个版本同题同噪声。` +
+    `每一对按结果等级比：撞了 > 误刹 > 险（TTC < 1.5 秒或并排擦过）> 正常，新版本更糟 = 变差。`;
+  const c = DATA.counts;
+  $("sum").innerHTML = [["变差", "worse"], ["变好", "better"], ["不变", ""], ["躲不开", ""]]
+    .map(([k, cls]) => `<div class="stat ${cls}"><span class="l">${k}</span><span class="v">${c[k]}</span></div>`).join("");
+  $("moves").innerHTML = DATA.moves.map(([a, b, n]) => `<span class="mv">${pill(a)}<span class="arrow">→</span>${pill(b)}<b>${n}</b></span>`).join("");
+}
+
+function buildList() {
+  const its = items();
+  $("list").innerHTML = its.map((it, i) =>
+    `<button type="button" class="item" data-i="${i}" aria-current="${i === sel}"><span class="q">题 ${it.q}</span>` +
+    `<span>${pill(it.old)}<span class="arrow">→</span>${pill(it.new)}</span><span class="rd">${roadName(it)}</span></button>`).join("") ||
+    `<p class="note">没有${filter}的题。</p>`;
+  $("list").querySelectorAll(".item").forEach(b => b.addEventListener("click", () => { sel = +b.dataset.i; open(); }));
+}
+
+function open() {
+  stop();
+  const it = cur();
+  $("list").querySelectorAll(".item").forEach(b => b.setAttribute("aria-current", +b.dataset.i === sel));
+  if (!it) return;
+  const sc = it.sc;
+  $("dtitle").textContent = `第 ${it.q} 题 · ${roadName(it)}`;
+  $("ddesc").textContent = `它在我前面 ${sc.gap_m} 米，${sc.cut_speed_mps} m/s（我 ${sc.ego_speed_mps}），` +
+    (sc.cut_time_s > 0 ? `用 ${sc.cut_time_s} 秒往我这边挪 ${sc.cut_depth_m} 米（车身${sc.cut_depth_m > 1 ? `压进我车道 ${(sc.cut_depth_m - 1).toFixed(2)} 米` : `离线还差 ${(1 - sc.cut_depth_m).toFixed(2)} 米`}）` : "不切进来") +
+    `；${it.comes_in ? "会切进来" : "不会切进来"}`;
+  $("scrub").max = Math.round(tEnd(it) / DT);
+  t = firstMoment(it);
+  render();
+}
+
+function firstMoment(it) {          // 打开时先停在两边第一次不一样的地方（往前 0.5 秒），看不出来就从 0 开始
+  const a = runOf(it, DATA.old), b = runOf(it, DATA.new);
+  const n = Math.min(a.t.length, b.t.length);
+  for (let i = 0; i < n; i++) if (Math.abs(a.a[i] - b.a[i]) > 0.01) return Math.max(0, (i - 5) * DT);
+  return 0;
+}
+
+/* ---------- roads ---------- */
+function drawRoad(svg, r, tt) {
+  const i = idx(r, tt), ex = lerp(r, "ex", tt), ey = lerp(r, "ey", tt), cx = lerp(r, "cx", tt), cy = lerp(r, "cy", tt);
+  const W = svg.clientWidth > 0 && svg.clientWidth < 600 ? 560 : 960;
+  svg.setAttribute("viewBox", `0 0 ${W} 236`);
+  const S = 16, PT = 26, x0 = ex - (W < 960 ? 8 : 14);
+  const X = x => (x - x0) * S, Y = y => PT + (y + 2) * S;
+  let s = `<rect class="road" x="0" y="${Y(-2)}" width="${W}" height="${12 * S}"/><rect class="mylane" x="0" y="${Y(2)}" width="${W}" height="${4 * S}"/>`;
+  s += `<line class="edge" x1="0" x2="${W}" y1="${Y(-2)}" y2="${Y(-2)}"/><line class="edge" x1="0" x2="${W}" y1="${Y(10)}" y2="${Y(10)}"/>`;
+  const off = ((x0 * S) % 144 + 144) % 144;
+  for (const yy of [2, 6]) s += `<line class="dash" x1="0" x2="${W}" y1="${Y(yy)}" y2="${Y(yy)}" stroke-dasharray="48 96" stroke-dashoffset="${off}"/>`;
+  for (let m = Math.ceil(x0 / 10) * 10; m <= x0 + W / S; m += 10)
+    s += `<line class="tick" x1="${X(m)}" x2="${X(m)}" y1="${Y(10)}" y2="${Y(10) + 6}"/><text class="ax" x="${X(m)}" y="${Y(10) + 18}" text-anchor="middle">${m} m</text>`;
+  s += `<text class="lbl muted" x="8" y="${Y(0) + 4}">旁边车道</text><text class="lbl muted" x="8" y="${Y(4) + 4}">我的车道</text>`;
+  if (r.lead[i]) s += `<line class="seen" x1="${X(ex + CAR_L / 2)}" y1="${Y(ey)}" x2="${X(cx - CAR_L / 2)}" y2="${Y(cy)}"/>`;
+  const inside = cy + CAR_W / 2 - 2 > 0;
+  s += `<rect class="c-cut${inside ? " in" : ""}" x="${X(cx - CAR_L / 2)}" y="${Y(cy - CAR_W / 2)}" width="${CAR_L * S}" height="${CAR_W * S}" rx="4"/>`;
+  s += `<rect class="c-ego" x="${X(ex - CAR_L / 2)}" y="${Y(ey - CAR_W / 2)}" width="${CAR_L * S}" height="${CAR_W * S}" rx="4"/>`;
+  if (r.a[i] < BRAKE) {
+    s += `<rect class="blight" x="${X(ex - CAR_L / 2) - 2}" y="${Y(ey - CAR_W / 2) + 2}" width="5" height="8" rx="1"/>`;
+    s += `<rect class="blight" x="${X(ex - CAR_L / 2) - 2}" y="${Y(ey + CAR_W / 2) - 10}" width="5" height="8" rx="1"/>`;
+  }
+  if (r.crashed && tt >= r.t.at(-1) - 1e-6) s += `<text class="lbl crash" x="${X((ex + cx) / 2)}" y="${PT - 8}" text-anchor="middle">撞上了（${r.t.at(-1).toFixed(1)} 秒）</text>`;
+  svg.innerHTML = s;
+  return { v: lerp(r, "ev", tt), dx: cx - ex, side: cy + CAR_W / 2 - 2, a: r.a[i], lead: r.lead[i] };
+}
+
+function head(el, it, v, cls, st) {
+  const r = runOf(it, v), lvName = v === DATA.old ? it.old : it.new;
+  const ended = r.crashed ? `，${r.t.at(-1).toFixed(1)} 秒撞上` : "";
+  const front = st.dx >= 0 ? `它在我前面 ${st.dx.toFixed(1)} 米` : `它在我后面 ${(-st.dx).toFixed(1)} 米`;
+  const side = st.side > 0 ? `车身压进我车道 ${st.side.toFixed(2)} 米` : `车身离我车道线 ${(-st.side).toFixed(2)} 米`;
+  el.innerHTML = `<span class="sw ${cls}"></span><b>${v}</b>${pill(lvName)}<span class="read">车速 ${st.v.toFixed(1)} · ${front} · ${side} · 踩 ${st.a.toFixed(1)}${ended}</span>`;
+}
+
+/* ---------- charts ---------- */
+const CW = 960, PL = 52, PR = 16;
+const cX = tt => PL + (tt / T_MAX) * (CW - PL - PR);
+function panel(top, h, ymin, ymax, ticks, key, title, it, tt) {
+  const cY = v => top + (ymax - v) / (ymax - ymin) * h;
+  let s = `<text class="lbl" x="${PL}" y="${top - 8}">${title}</text>`;
+  for (const v of ticks) s += `<line class="${v === 0 ? "zero" : "grid"}" x1="${PL}" x2="${CW - PR}" y1="${cY(v)}" y2="${cY(v)}"/><text class="ax" x="${PL - 8}" y="${cY(v) + 4}" text-anchor="end">${v < 0 ? "−" + Math.abs(v) : v}</text>`;
+  for (const [v, cls] of [[DATA.old, "old"], [DATA.new, "new"]]) {
+    const r = runOf(it, v);
+    const pts = r.t.map((x, i) => `${cX(x).toFixed(1)},${cY(Math.max(ymin, Math.min(ymax, r[key][i]))).toFixed(1)}`).join(" ");
+    s += `<polyline class="ln ${cls}" points="${pts}"/>`;
+    if (r.crashed) { const x = cX(r.t.at(-1)), y = cY(Math.max(ymin, Math.min(ymax, r[key].at(-1)))); s += `<line class="xmark" x1="${x - 6}" x2="${x + 6}" y1="${y - 6}" y2="${y + 6}"/><line class="xmark" x1="${x - 6}" x2="${x + 6}" y1="${y + 6}" y2="${y - 6}"/>`; }
+  }
+  s += `<line class="ph" x1="${cX(tt)}" x2="${cX(tt)}" y1="${top}" y2="${top + h}"/>`;
+  return s;
+}
+function drawChart(it, tt) {
+  let s = panel(28, 120, 0, 16, [0, 5, 10, 15], "ev", "车速（m/s）", it, tt);
+  s += panel(196, 120, -8.5, 3, [2, 0, -2, -4, -6, -8], "a", "踩多大（m/s²，负 = 刹车）", it, tt);
+  for (let k = 0; k <= T_MAX * 2; k++) s += `<text class="ax" x="${cX(k / 2)}" y="346" text-anchor="middle">${(k / 2).toFixed(1)}</text>`;
+  s += `<text class="ax" x="${CW - PR}" y="332" text-anchor="end">秒</text>`;
+  s += `<rect id="hit" x="${PL}" y="20" width="${CW - PL - PR}" height="300" fill="transparent" style="cursor:pointer"/>`;
+  $("chart").innerHTML = s;
+  $("hit").addEventListener("click", ev => {
+    const b = $("chart").getBoundingClientRect(), x = (ev.clientX - b.left) / b.width * CW;
+    t = Math.max(0, Math.min(tEnd(cur()), Math.round((x - PL) / (CW - PL - PR) * T_MAX / DT) * DT)); stop(); render();
+  });
+}
+
+/* ---------- playback ---------- */
+function render() {
+  const it = cur(); if (!it) return;
+  t = Math.max(0, Math.min(tEnd(it), t));
+  $("scrub").value = Math.round(t / DT);
+  $("tnow").textContent = `${t.toFixed(1)} s`;
+  head($("hOld"), it, DATA.old, "old", drawRoad($("roadOld"), runOf(it, DATA.old), t));
+  head($("hNew"), it, DATA.new, "new", drawRoad($("roadNew"), runOf(it, DATA.new), t));
+  drawChart(it, t);
+}
+function stop() { playing = false; last = null; $("play").textContent = "▶ 播放"; }
+function tick(now) {
+  if (!playing) return;
+  if (last != null) t += (now - last) / 1000 * speed;
+  last = now;
+  if (t >= tEnd(cur())) { t = tEnd(cur()); render(); stop(); return; }
+  render(); requestAnimationFrame(tick);
+}
+$("play").addEventListener("click", () => {
+  if (playing) { stop(); return; }
+  if (t >= tEnd(cur()) - 1e-6) t = 0;
+  playing = true; last = null; $("play").textContent = "❚❚ 暂停"; requestAnimationFrame(tick);
+});
+$("scrub").addEventListener("input", e => { stop(); t = +e.target.value * DT; render(); });
+document.querySelectorAll(".speeds button").forEach(b => b.addEventListener("click", () => {
+  speed = +b.dataset.sp; document.querySelectorAll(".speeds button").forEach(x => x.setAttribute("aria-pressed", x === b));
+}));
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  filter = b.dataset.f; sel = 0;
+  document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  buildList(); open();
+}));
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
+  if (e.key === " ") { e.preventDefault(); $("play").click(); }
+  if (e.key === "ArrowRight") { stop(); t += DT; render(); }
+  if (e.key === "ArrowLeft") { stop(); t -= DT; render(); }
+});
+window.addEventListener("resize", () => render());
+
+header(); buildList(); open();
+</script>
