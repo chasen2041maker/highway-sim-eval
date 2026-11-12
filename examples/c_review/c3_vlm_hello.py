@@ -22,15 +22,19 @@ from examples.c_review.llm_client import ROOT, call, config
 PHOTO = ROOT / "outputs" / "c3" / "picked" / "scene-0103_14_brake.jpg"
 
 
-def image_part(img: Image.Image, detail: str = "low") -> dict:
-    """一张图 → 消息里的一块：JPEG 转成 base64，放进 data: 网址。detail=low 最省 token。"""
+def image_part(img: Image.Image, detail: str | None = None) -> dict:
+    """一张图 → 消息里的一块：JPEG 转成 base64，放进 data: 网址。
+    detail 是 OpenAI 自己的参数（low 最省 token）；默认不发，DeepSeek 等别家不一定认它。"""
     buf = io.BytesIO()
     img.convert("RGB").save(buf, format="JPEG", quality=85)
     url = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
-    return {"type": "image_url", "image_url": {"url": url, "detail": detail}}
+    part = {"type": "image_url", "image_url": {"url": url}}
+    if detail:
+        part["image_url"]["detail"] = detail
+    return part
 
 
-def ask(model: str, question: str, img: Image.Image, detail: str = "low") -> tuple[str, dict]:
+def ask(model: str, question: str, img: Image.Image, detail: str | None = None) -> tuple[str, dict]:
     """问一个带图的问题，返回 (回答, token 用量)。"""
     body = {"model": model, "messages": [{"role": "user", "content": [
         {"type": "text", "text": question}, image_part(img, detail)]}]}
