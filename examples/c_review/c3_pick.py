@@ -242,8 +242,8 @@ def pick_scene(frames, use_path=True, same_dir=True) -> list[dict]:
 
 # ---------- 输出：难例表 + 照片 ----------
 
-def save_photo(T, frame, who, out: Path) -> None:
-    """前视照片缩到 800×450；TTC 那条把挑中的框画成橙色。"""
+def draw_box(T, frame, who):
+    """前视照片（原尺寸）；who 不是 None 就把它的 3D 框画成橙色。返回 PIL 图。"""
     from PIL import Image, ImageDraw
     img = Image.open(ROOT / frame["cam"]["filename"]).convert("RGB")
     if who is not None:
@@ -254,7 +254,12 @@ def save_photo(T, frame, who, out: Path) -> None:
             d = ImageDraw.Draw(img)
             for i, j in [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]:
                 d.line([tuple(uv[i]), tuple(uv[j])], fill=(255, 120, 0), width=5)
-    img.resize((800, 450)).save(out, quality=85)
+    return img
+
+
+def save_photo(T, frame, who, out: Path) -> None:
+    """前视照片缩到 800×450；TTC 那条把挑中的框画成橙色。"""
+    draw_box(T, frame, who).resize((800, 450)).save(out, quality=85)
 
 
 def write_parquet(rows: list[dict], out: Path) -> None:

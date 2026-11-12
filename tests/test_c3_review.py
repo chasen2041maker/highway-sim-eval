@@ -28,3 +28,4 @@ def test_prompt_lists_every_box_and_has_no_conclusion():
         assert word in p
     assert "规则会挑错" in p and "这是第 6.4 秒。" in p
     assert "可能不准" in p and "这些数字可信" not in p          # TTC 是规则的估计，不能说成可信
+    assert "我停着等，别人从我前面正常经过" in p                 # 3d：值得看 / 误挑的边界例子

@@ -6,6 +6,7 @@
 第一版说“这些数字可信”、“危险”定义成“TTC < 1.5”，模型就信了规则在我停着时算错的 TTC 1.0，把 scene-1100 判成危险
 （deepseek-flash 1 / 3）。现在分开说：测量值可信，TTC 是规则的估计、可能不准。
 注意：这 3 条只是调参题，别改提示词改到它们全对；真正的分数在 3e 用另一批片段考（B4 第 5 步）。
+3d 发现“值得看 / 误挑”的边界没写清（我停着让它过，裁判当成“减速”），补了边界例子——这是澄清标注规范，人标的时候也守这条。
 
 先拿 3 个人看过照片、答案已知的片段试（2d）：
   scene-0103 第 14 帧：急刹 −3.24，左边黑车横穿 → 值得看 / 横穿
@@ -23,7 +24,7 @@ import re
 
 from PIL import Image
 
-from examples.c_review.c3_pick import accel, pick_scene, scene_frames
+from examples.c_review.c3_pick import accel, draw_box, pick_scene, scene_frames
 from examples.c_review.c3_scene_view import ZH
 from examples.c_review.c3_vlm_hello import ask
 from examples.c_review.llm_client import config
@@ -32,8 +33,9 @@ from examples.c_review.nuscenes_tables import ROOT as NUSCENES, load
 # ---------- 3b 定的两把尺子 ----------
 VERDICTS = {
     "危险": "照片加测量值能看出：不刹车就会撞上；或者减速度比 −5 m/s² 还猛（紧急制动）。TTC 只作参考",
-    "值得看": "照片里有车或人在和我抢路，我减了速，但数字没到“危险”那么重",
-    "误挑": "照片里看不出任何需要我反应的东西（规则看错了）",
+    "值得看": "照片里有车或人在和我抢路，我在动、并且为它减了速，但数字没到“危险”那么重",
+    "误挑": "照片里看不出任何需要我反应的东西（规则看错了）。边界例子：我停着等，别人从我前面正常经过；"
+            "人或车在隔离栏、安全岛、路缘后面",
     "看不出": "照片看不清：太黑、被挡住",
 }
 CAUSES = {
@@ -83,6 +85,7 @@ def build_prompt(fact_text: str) -> str:
     return f"""你在审一段自动驾驶路采数据。下面是一辆车的前视摄像头照片，以及程序给的事实。
 车速、加速度、对象的位置是测量值，可信；TTC 是规则按“我在追它”估出来的，可能不准（比如我停着、它从旁边经过时），要对照照片判断。
 规则把这一刻挑出来，是因为它“可能”值得看；规则会挑错，你要看照片判断。
+照片上的橙色框，框出的是规则挑中的那个东西（因为急刹挑中时没有框）。
 
 事实：
 {fact_text}
@@ -124,6 +127,21 @@ def front_photo(T, frame) -> Image.Image:
     return Image.open(NUSCENES / frame["cam"]["filename"]).resize((800, 450))
 
 
+def picked(frames, k, use_path, same_dir):
+    """这一帧被规则挑中的那一条（规则名、数值、对象）；没挑中返回 None。"""
+    for p in pick_scene(frames, use_path, same_dir):
+        if p["k"] == k:
+            return p
+    return None
+
+
+def review_photo(T, frames, k, use_path, same_dir) -> Image.Image:
+    """给模型看的照片：把规则挑中的那个东西用橙色框框出来（急刹没有对象，就不画框），缩到 800×450。
+    3d 发现：用“前方 14.8 米、右边 1.2 米”指路，模型在照片上估不准距离，会找错东西；框出来就不用估。"""
+    p = picked(frames, k, use_path, same_dir)
+    return draw_box(T, frames[k], p["who"] if p else None).resize((800, 450))
+
+
 def main():
     _, _, model = config()
     if not model:
@@ -136,7 +154,7 @@ def main():
         frames = scene_frames(T, scenes[name])
         k = frame_no - 1
         fact_text = facts(frames, k, use_path, same_dir)
-        text, u = ask(model, build_prompt(fact_text), front_photo(T, frames[k]))
+        text, u = ask(model, build_prompt(fact_text), review_photo(T, frames, k, use_path, same_dir))
         r = parse_answer(text)
         print(f"\n{name} 第 {frame_no} 帧    人的答案：{h_verdict}{' / ' + h_cause if h_cause else ''}")
         print("  给模型的事实：" + fact_text.replace("\n", " "))
