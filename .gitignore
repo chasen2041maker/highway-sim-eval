@@ -7,3 +7,4 @@ outputs/
 .DS_Store
 cpp/build/
 data/
+.env
