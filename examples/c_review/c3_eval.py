@@ -20,6 +20,15 @@ mini 只有 51 条、正样本 3 条，所有比例都带 95% 置信区间（B4�
     python -m examples.c_review.c3_eval report
 换了提示词 / 规范再跑一轮，加一个轮次名，结果另存、不盖掉上一轮：
     python -m examples.c_review.c3_eval single v2          → outputs/c3/eval/single_v2.jsonl
+轮次名 route（4c 之后）：规范不变（v2），只多给信息——事实里加“我接下来 5 秒实际开的路”（单模型、工具版都给），
+工具版的 road_users 再加“从 1 秒前到 3 秒后离我的路多远”。这 51 条是调参题，结果只说明改动起没起作用，不算真分数：
+    python -m examples.c_review.c3_eval single route
+    python -m examples.c_review.c3_eval agent route
+结果（11-13，调参题）：单模型 + 路线 48/51、召回 2/2、精确 2/5，104,920 token（v2 是 49/51、2/2、2/4）——知道自己在左转，
+可照片里量不出行人离路线多远，1094_13 照样多报；工具版 + 路线 + 轨迹 51/51、2/2、2/2，384,520 token——0103_13 看到 SUV
+“离我的路 6.9 → 1.1 米”抓到了，0916_05、1094_05、1094_13 看到行人“离我的路越来越远”判对了（规范没改，靠的是信息）。
+3 秒这个窗口和规则的 TTC 门槛一样，但它是看过 0103_13 才加的（2 秒窗口抓不到那辆 SUV），所以这是调参题上的分数。
+分级（单模型 v2 先过，报“值得看”的 4 条再交给工具版 + 路线）：结果同样 2/2、2/2，token 142,011，约全跑工具版的 37%。
 """
 
 from __future__ import annotations
@@ -42,6 +51,7 @@ LABEL_DIR = ROOT / "outputs" / "c3" / "label"
 EVAL_DIR = ROOT / "outputs" / "c3" / "eval"
 VERDICTS = ["危险", "值得看", "没事", "看不出"]
 POSITIVE = ("危险", "值得看")
+VARIANTS = {"route": {"route": True, "track": True}}   # 轮次名 → 多给哪些信息；别的轮次名（v2 等）什么都不多给
 
 
 def load_answer_key():
@@ -102,11 +112,13 @@ def tokens(*usages) -> int:
 
 def review_one(mode, model, T, frames, k) -> dict:
     """复核一帧，返回要存的一行（答案、依据、token；分开做还存两份报告；智能体还存几轮、查了哪些工具）。"""
-    mode = mode.partition("_")[0]
+    mode, _, tag = mode.partition("_")
+    v = VARIANTS.get(tag, {})
     if mode == "agent":
-        return review_agent(model, T, frames, k, log=lambda *a: None)
+        return review_agent(model, T, frames, k, log=lambda *a: None,
+                            route=v.get("route", False), track=v.get("track", False))
     p = picked(frames, k, True, True)
-    fact_text = facts(frames, k, True, True)
+    fact_text = facts(frames, k, True, True, with_route=v.get("route", False))
     photo = review_photo(T, frames, k, True, True)
     row = {}
     if mode == "single":

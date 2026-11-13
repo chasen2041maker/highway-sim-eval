@@ -28,6 +28,7 @@ v2 在这 51 条上：5 条多报都没了，冒出 1 条新的（scene-0655 第
 from __future__ import annotations
 
 import json
+import math
 import re
 
 from PIL import Image
@@ -71,8 +72,35 @@ CASES = [
 ]
 
 
-def facts(frames, k, use_path, same_dir) -> str:
-    """程序算好的事实，写成几行字。只写量出来的数，不写“危险”“为什么”这种结论。"""
+def route_text(frames, k, seconds: int = 5) -> str:
+    """接下来几秒我实际开的路（录像里的，只有离线复核能用）：每秒在我现在的坐标里往前 / 往左几米、车头转了几度。
+    4c 发现：照片只朝正前方，看不出我在拐弯（scene-1094 第 13 帧，2 秒内车头左转 49°，照片里“在前面”的行人离我的路 7.3 米）。
+    这几行字只要约 100 token，又几乎每帧都用得上，所以直接放进事实，不做成工具。"""
+    f = frames[k]
+    (x0, y0), yaw0 = f["ego_xy"], f["ego_yaw"]
+    c, s = math.cos(yaw0), math.sin(yaw0)
+    lines, turn, dist, last = [], 0.0, 0.0, k
+    for sec in range(1, seconds + 1):
+        later = [m for m in range(k + 1, len(frames)) if abs(frames[m]["t"] - f["t"] - sec) <= 0.3]
+        if not later:
+            lines.append(f"{sec} 秒后：录像到头了")
+            break
+        m = min(later, key=lambda m: abs(frames[m]["t"] - f["t"] - sec))
+        dx, dy = frames[m]["ego_xy"][0] - x0, frames[m]["ego_xy"][1] - y0
+        fwd, left = dx * c + dy * s, -dx * s + dy * c
+        turn = math.degrees((frames[m]["ego_yaw"] - yaw0 + math.pi) % (2 * math.pi) - math.pi)
+        head = "车头方向不变" if abs(turn) < 3 else f"车头{'左' if turn > 0 else '右'}转 {abs(turn):.0f}°"
+        lines.append(f"{sec} 秒后：前 {fwd:.1f} 米、{'左' if left >= 0 else '右'} {abs(left):.1f} 米，{head}")
+        last = m
+    for m in range(k, last):
+        dist += math.dist(frames[m]["ego_xy"], frames[m + 1]["ego_xy"])
+    way = "基本直行" if abs(turn) < 15 else f"{'左' if turn > 0 else '右'}转约 {abs(turn):.0f}°"
+    return "\n".join(lines) + f"\n合起来：{way}，一共开了 {dist:.1f} 米"
+
+
+def facts(frames, k, use_path, same_dir, with_route: bool = False) -> str:
+    """程序算好的事实，写成几行字。只写量出来的数，不写“危险”“为什么”这种结论。
+    with_route：再加上接下来 5 秒我实际开的路（4c 之后的变体，轮次名 route）。"""
     f = frames[k]
     a = accel(frames, k)
     if a is not None:
@@ -90,6 +118,8 @@ def facts(frames, k, use_path, same_dir) -> str:
                          f"对象是{ZH.get(o['cat'], o['cat'])}，在我前方 {o['ex']:.1f} 米、{side}。")
         else:
             lines.append(f"规则挑中它的原因：急刹，减速度 {p['value']:.2f} m/s²。")
+    if with_route:
+        lines.append("我接下来 5 秒实际开的路（录像里的测量值，可信；前 / 左是相对我现在的位置和车头）：\n" + route_text(frames, k))
     return "\n".join(lines)
 
 

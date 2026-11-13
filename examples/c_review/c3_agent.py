@@ -36,8 +36,8 @@ import json
 import math
 
 from examples.c_review.c3_agent_hello import run_loop, show, tool
-from examples.c_review.c3_pick import (LANE_HALF_M, MOVING_MPS, accel, draw_box, find, is_road_user, its_velocity,
-                                       my_path, path_dist, scene_frames)
+from examples.c_review.c3_pick import (LANE_HALF_M, MOVING_MPS, TTC_MAX_S, accel, draw_box, find, is_road_user,
+                                       its_velocity, my_path, path_dist, scene_frames)
 from examples.c_review.c3_review import (CASES, CAUSE_RULE, CAUSES, TRUST_PICKED, TRUST_RANDOM, VERDICTS, WHY_PICKED,
                                          WHY_RANDOM, check_answer, facts, parse_answer, picked, review_photo)
 from examples.c_review.c3_scene_view import ZH
@@ -50,6 +50,16 @@ LOOK_FRAMES = 4        # look_at 最多往前 / 往后看几帧（1 帧 0.5 秒�
 NEAR_M = 40.0          # road_users 默认列多少米以内
 MAX_USERS = 12         # road_users 最多列几个
 NO_CAUSE = "无"        # 交卷时 verdict 不是危险 / 值得看，cause 选它
+TRACK_OFFSETS = (-2, 0, 2, 4, 6)   # track 变体：看它在这些帧（约 −1、0、+1、+2、+3 秒）离我的路多远；3 秒和规则的 TTC 门槛一样
+
+def tool_specs(track: bool = False) -> list:
+    """工具说明书。track=True 时 road_users 的说明里加一句“还给前后几秒离我的路多远”。"""
+    specs = json.loads(json.dumps(TOOLS))
+    if track:
+        f = specs[2]["function"]
+        f["description"] += f"每个还给“从 1 秒前到 {TTC_MAX_S:.0f} 秒后离我的路多远”，看它是不是正在走进我的路。"
+    return specs
+
 
 TOOLS = [
     tool("look_at", "看这一刻前后某一帧的前视照片（关键帧每 0.5 秒一帧）。用来看清东西在怎么动、会不会走进我的路。"
@@ -69,7 +79,7 @@ TOOLS = [
 ]
 
 
-def agent_prompt(fact_text: str, picked: bool = True) -> str:
+def agent_prompt(fact_text: str, picked: bool = True, track: bool = False) -> str:
     """起点和 3c 的 build_prompt 一样（同样的事实、同样的尺子），只是多了工具的说明，答案改成调用 submit_answer。"""
     verdicts = "\n".join(f"- {k}：{v}" for k, v in VERDICTS.items())
     causes = "\n".join(f"- {k}：{v}" for k, v in CAUSES.items())
@@ -83,7 +93,7 @@ def agent_prompt(fact_text: str, picked: bool = True) -> str:
 你可以先用工具查更多再判断，也可以不查：
 - look_at：看前后几帧的照片，看清东西在怎么动；
 - my_motion：我前后 2 秒的车速、加速度；
-- road_users：这一刻我前方的车和人，在哪、离我的路多远、往哪走、多快。
+- road_users：这一刻我前方的车和人，在哪、离我的路多远、往哪走、多快{"；还有它从 1 秒前到 3 秒后离我的路多远" if track else ""}。
 每查一次都要花钱：这张照片已经能判断清楚，就直接交卷。判断好了调用 submit_answer 交卷，不要用文字回答。
 
 两把尺子，只能从格子里选：
@@ -115,8 +125,28 @@ def motion_text(frames, k, o) -> str:
     return f"{d}，{speed:.1f} m/s"
 
 
-def make_tools(T, frames, k, target):
-    """返回 run_tool(name, args)：三个查东西的工具，都只读录好的数据。target = 规则挑中的那个东西（没有就 None）。"""
+def track_text(frames, k, o, path) -> str:
+    """它在 −1、0、+1、+2、+3 秒（大约）离我的路多远；这一刻不在路上、3 秒内会走进来的，明说。
+    4c 发现：road_users 只给这一刻，scene-0103 第 13 帧那辆 SUV 停着、离我的路 6.9 米，模型判“没事”，
+    可 3 秒后它开进了我的路（6.9 → 1.2 米）。"""
+    near = LANE_HALF_M + o["w"] / 2
+    dists = []
+    for off in TRACK_OFFSETS:
+        m = k + off
+        other = find(frames[m], o["inst"]) if 0 <= m < len(frames) else None
+        dists.append(None if other is None else path_dist(path, other["xy"]))
+    shown = " → ".join("—" if d is None else f"{d:.1f}" for d in dists)
+    now = dists[TRACK_OFFSETS.index(0)]
+    later = [d for off, d in zip(TRACK_OFFSETS, dists) if off > 0 and d is not None]
+    note = ""
+    if now is not None and now >= near and any(d < near for d in later):
+        note = f"，{TTC_MAX_S:.0f} 秒内会走进我的路"
+    return f"离我的路（1 秒前 → 这一刻 → 1、2、3 秒后，米；— = 那一帧没有它）：{shown}{note}"
+
+
+def make_tools(T, frames, k, target, track: bool = False):
+    """返回 run_tool(name, args)：三个查东西的工具，都只读录好的数据。target = 规则挑中的那个东西（没有就 None）。
+    track：road_users 每个东西多给一行“从 1 秒前到 3 秒后离我的路多远”（4c 之后的变体，轮次名 route）。"""
     path = my_path(frames, k)
 
     def rel(m):
@@ -158,7 +188,8 @@ def make_tools(T, frames, k, target):
             where = f"前方 {o['ex']:.1f} 米、{side}"
             on = "在我的路上" if d < LANE_HALF_M + o["w"] / 2 else f"离我的路 {d:.1f} 米"
             boxed = "（橙色框）" if target and o["inst"] == target["inst"] else ""
-            lines.append(f"- {ZH.get(o['cat'], o['cat'])}{boxed}：{where}，{on}，{motion_text(frames, k, o)}")
+            lines.append(f"- {ZH.get(o['cat'], o['cat'])}{boxed}：{where}，{on}，{motion_text(frames, k, o)}"
+                         + (f"\n    {track_text(frames, k, o, path)}" if track else ""))
         more = f"\n（还有 {len(near) - MAX_USERS} 个离我的路更远的没列）" if len(near) > MAX_USERS else ""
         return (f"这一刻我前方 {max_m:.0f} 米以内的车和人（“我的路”= 录像里我接下来 5 秒实际开过的路，"
                 f"离它 < 半个车道 + 半个身宽算在路上）：\n" + "\n".join(lines) + more), None
@@ -173,14 +204,16 @@ def make_tools(T, frames, k, target):
     return run_tool
 
 
-def review_agent(model, T, frames, k, use_path=True, same_dir=True, log=print) -> dict:
-    """复核一帧，返回和 c3_eval 一样格式的一行，多存：几轮、调了哪些工具、为什么停。"""
+def review_agent(model, T, frames, k, use_path=True, same_dir=True, log=print,
+                 route: bool = False, track: bool = False) -> dict:
+    """复核一帧，返回和 c3_eval 一样格式的一行，多存：几轮、调了哪些工具、为什么停。
+    route：事实里加我接下来 5 秒的路；track：road_users 加前后几秒离我的路多远。"""
     p = picked(frames, k, use_path, same_dir)
-    fact_text = facts(frames, k, use_path, same_dir)
+    fact_text = facts(frames, k, use_path, same_dir, with_route=route)
     messages = [{"role": "user", "content": [
-        {"type": "text", "text": agent_prompt(fact_text, p is not None)},
+        {"type": "text", "text": agent_prompt(fact_text, p is not None, track)},
         image_part(review_photo(T, frames, k, use_path, same_dir))]}]
-    r = run_loop(model, messages, TOOLS, make_tools(T, frames, k, p["who"] if p else None),
+    r = run_loop(model, messages, tool_specs(track), make_tools(T, frames, k, p["who"] if p else None, track),
                  max_steps=MAX_STEPS, final_tool="submit_answer", log=log)
     if r["stopped"] == "final_tool":
         a = check_answer(r["final_args"])

@@ -1,6 +1,7 @@
 """C3 4a：智能体循环（不连模型：用一个假服务器，按 DeepSeek 的规矩检查我们发过去的对话）。"""
 
 import json
+import math
 
 from PIL import Image
 
@@ -143,3 +144,41 @@ def test_tool_stats():
     s = tool_stats(rows)
     assert s["counts"] == {"look_at": 2, "road_users": 1} and s["no_tool"] == 1 and s["steps"] == 2.0
     assert s["stopped"] == {"final_tool": 2} and s["cache"] == 10
+
+
+# ---------- 4c 之后：路线写进事实、road_users 加前后几秒离我的路多远 ----------
+
+from examples.c_review.c3_agent import track_text
+from examples.c_review.c3_pick import my_path
+from examples.c_review.c3_review import route_text
+
+
+def long_frames(turn_deg_per_frame=0.0):
+    """每 0.5 秒一帧，13 帧；我 10 m/s；可以每帧转一点车头。行人在第 6 帧（中间那帧）前方 15 米、右 4 米，往左 1 m/s。"""
+    frames, x, y, yaw = [], 0.0, 0.0, 0.0
+    for i in range(13):
+        if i:
+            x += 5.0 * math.cos(yaw)
+            y += 5.0 * math.sin(yaw)
+            yaw += math.radians(turn_deg_per_frame)
+        frames.append({"t": 0.5 * i, "v": None if i == 0 else 10.0, "ego_xy": (x, y), "ego_yaw": yaw, "objs": []})
+    for i, f in enumerate(frames):                       # 行人：地图上 (45, −4 + 0.5 (i−6))，第 6 帧在我前方 15 米、右 4 米
+        f["objs"] = [{"inst": "p", "cat": "human.pedestrian.adult", "xy": (45.0, -4.0 + 0.5 * (i - 6)),
+                      "ex": 45.0 - f["ego_xy"][0], "ey": -4.0 + 0.5 * (i - 6), "w": 0.6}]
+    return frames
+
+
+def test_route_text_straight_and_turning():
+    text = route_text(long_frames(), 6)
+    assert text.startswith("1 秒后：前 10.0 米、左 0.0 米，车头方向不变")
+    assert "4 秒后：录像到头了" in text and text.endswith("合起来：基本直行，一共开了 30.0 米")
+    text = route_text(long_frames(turn_deg_per_frame=10.0), 0)
+    assert "1 秒后：" in text and "车头左转 20°" in text and "合起来：左转约 100°" in text
+
+
+def test_track_text_says_when_it_walks_into_my_path():
+    frames = long_frames()
+    path = my_path(frames, 6)
+    text = track_text(frames, 6, frames[6]["objs"][0], path)
+    # 离我的路：5 → 4 → 3 → 2 → 1 米（每秒往左 1 米），门槛 1.75 + 0.3 = 2.05 → 3 秒内会走进
+    assert text.endswith("：5.0 → 4.0 → 3.0 → 2.0 → 1.0，3 秒内会走进我的路")
