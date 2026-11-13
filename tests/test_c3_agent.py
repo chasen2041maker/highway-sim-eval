@@ -182,3 +182,11 @@ def test_track_text_says_when_it_walks_into_my_path():
     text = track_text(frames, 6, frames[6]["objs"][0], path)
     # 离我的路：5 → 4 → 3 → 2 → 1 米（每秒往左 1 米），门槛 1.75 + 0.3 = 2.05 → 3 秒内会走进
     assert text.endswith("：5.0 → 4.0 → 3.0 → 2.0 → 1.0，3 秒内会走进我的路")
+
+
+def test_all_variant_puts_route_and_road_users_in_the_facts():
+    from examples.c_review.c3_eval import VARIANTS, variant_facts
+    text = variant_facts(long_frames(), 6, VARIANTS["all"])
+    assert "合起来：基本直行" in text and "下面这段也是测量值" in text and "3 秒内会走进我的路" in text
+    plain = variant_facts(long_frames(), 6, {})
+    assert "合起来" not in plain and "离我的路" not in plain

@@ -27,3 +27,10 @@ def test_model_scores_counts():
     s = model_scores(tasks, labels, rows)
     assert (s["n"], s["right"], s["tp"], s["fp"], s["fn"], s["cause_ok"], s["invalid"]) == (4, 1, 1, 1, 1, 1, 1)
     assert s["conf"]["没事"]["无效"] == 1 and s["conf"]["值得看"]["没事"] == 1 and s["tokens"] == 40
+
+
+def test_flips_lists_changed_answers():
+    from examples.c_review.c3_eval import flips
+    a = [{"id": "x", "verdict": "没事"}, {"id": "y", "verdict": "值得看"}]
+    b = [{"id": "x", "verdict": "没事"}, {"id": "y", "verdict": "没事"}, {"id": "z", "verdict": "没事"}]
+    assert flips(a, b) == ["y"]

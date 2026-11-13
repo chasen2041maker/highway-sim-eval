@@ -29,16 +29,23 @@ mini 只有 51 条、正样本 3 条，所有比例都带 95% 置信区间（B4�
 “离我的路 6.9 → 1.1 米”抓到了，0916_05、1094_05、1094_13 看到行人“离我的路越来越远”判对了（规范没改，靠的是信息）。
 3 秒这个窗口和规则的 TTC 门槛一样，但它是看过 0103_13 才加的（2 秒窗口抓不到那辆 SUV），所以这是调参题上的分数。
 分级（单模型 v2 先过，报“值得看”的 4 条再交给工具版 + 路线）：结果同样 2/2、2/2，token 142,011，约全跑工具版的 37%。
+轮次名 all（对照）：不让它来回查，把工具版能查到的“文字信息”一次全写进单模型的提示词——路线 + 前方的车和人
+（离我的路多远、往哪走、从 1 秒前到 3 秒后离我的路多远）；前后帧的照片不给（贵）。和工具版 + 路线比：
+分数一样 → 起作用的是信息，来回查的循环可以省；不一样 → 循环本身（自己决定多看几帧照片）有价值。
+轮次名 v2b：和 v2 一模一样再跑一遍，看同一个配置两次答案差几条（随机波动有多大）：
+    python -m examples.c_review.c3_eval single all
+    python -m examples.c_review.c3_eval single v2b
 """
 
 from __future__ import annotations
 
 import json
 import sys
+import unicodedata
 from pathlib import Path
 
 from evaluation.confidence import wilson_interval
-from examples.c_review.c3_agent import review_agent
+from examples.c_review.c3_agent import make_tools, review_agent
 from examples.c_review.c3_pick import scene_frames
 from examples.c_review.c3_review import build_prompt, facts, parse_answer, picked, review_photo
 from examples.c_review.c3_review_multi import ask_text, judge_prompt, looker_prompt, reader_prompt
@@ -51,7 +58,19 @@ LABEL_DIR = ROOT / "outputs" / "c3" / "label"
 EVAL_DIR = ROOT / "outputs" / "c3" / "eval"
 VERDICTS = ["危险", "值得看", "没事", "看不出"]
 POSITIVE = ("危险", "值得看")
-VARIANTS = {"route": {"route": True, "track": True}}   # 轮次名 → 多给哪些信息；别的轮次名（v2 等）什么都不多给
+VARIANTS = {                                          # 轮次名 → 多给哪些信息；别的轮次名（v2、v2b 等）什么都不多给
+    "route": {"route": True, "track": True},            # 单模型：事实里加路线；工具版：再加 road_users 的轨迹
+    "all": {"route": True, "track": True, "users": True},  # 单模型：路线 + road_users（含轨迹）一次全写进提示词
+}
+
+
+def variant_facts(frames, k, v: dict, target=None) -> str:
+    """单模型的事实：按变体多写路线、前方的车和人（就是工具版 road_users 会返回的那段字）。"""
+    text = facts(frames, k, True, True, with_route=v.get("route", False))
+    if v.get("users"):
+        users, _ = make_tools(None, frames, k, target, track=v.get("track", False))("road_users", {})
+        text += "\n下面这段也是测量值（人工标注的 3D 框），可信：\n" + users
+    return text
 
 
 def load_answer_key():
@@ -118,7 +137,7 @@ def review_one(mode, model, T, frames, k) -> dict:
         return review_agent(model, T, frames, k, log=lambda *a: None,
                             route=v.get("route", False), track=v.get("track", False))
     p = picked(frames, k, True, True)
-    fact_text = facts(frames, k, True, True, with_route=v.get("route", False))
+    fact_text = variant_facts(frames, k, v, p["who"] if p else None)
     photo = review_photo(T, frames, k, True, True)
     row = {}
     if mode == "single":
@@ -199,7 +218,7 @@ def report_model(mode, tasks, labels):
     p = results_path(mode)
     if not p.exists():
         print(f"\n{mode}：还没跑")
-        return
+        return None
     rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
     s = model_scores(tasks, labels, rows)
     base, _, tag = mode.partition("_")
@@ -221,6 +240,34 @@ def report_model(mode, tasks, labels):
         for tid, h, r in s["wrong"]:
             m = f"{r['verdict']}{' / ' + r['cause'] if r['cause'] else ''}" if r["valid"] else "无效"
             print(f"    {tid}：答案 {h['verdict']}{' / ' + h['cause'] if h['cause'] else ''}，模型 {m}。依据：{(r['evidence'] or r['raw'])[:80]}")
+    return name, s, rows
+
+
+def flips(rows_a, rows_b) -> list:
+    """同一批题两次答案（verdict）不一样的 id。"""
+    a = {r["id"]: r["verdict"] for r in rows_a}
+    return sorted(i for i, r in ((r["id"], r) for r in rows_b) if i in a and a[i] != r["verdict"])
+
+
+def pad(s: str, width: int) -> str:
+    """按显示宽度补空格（中文字占两格），让表格对齐。"""
+    w = sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in s)
+    return s + " " * max(width - w, 0)
+
+
+def report_summary(results):
+    """几轮放一张表：准确率、值得看抓到几个、多报几个、token。"""
+    print("\n总表（同一张答案卷；值得看 = 危险或值得看）")
+    print(f"  {pad('哪一轮', 30)}{pad('准确率', 9)}{pad('抓到', 7)}{pad('多报', 6)}token")
+    for name, s, _ in results:
+        acc = f"{s['right']}/{s['n']}"
+        caught = f"{s['tp']}/{s['tp'] + s['fn']}"
+        print(f"  {pad(name, 30)}{pad(acc, 9)}{pad(caught, 7)}{pad(str(s['fp']), 6)}{s['tokens']:,}")
+    runs = {name: rows for name, _, rows in results}
+    a, b = runs.get("一个模型（3c）·v2"), runs.get("一个模型（3c）·v2b")
+    if a and b:
+        f = flips(a, b)
+        print(f"  随机波动：单模型 v2 原样跑两次，{len(f)} 条答案不一样{'：' + '、'.join(f) if f else ''}")
 
 
 def tool_stats(rows) -> dict:
@@ -253,9 +300,10 @@ def main():
     elif mode == "report":
         report_rules(tasks, labels)
         files = sorted(EVAL_DIR.glob("*.jsonl")) if EVAL_DIR.exists() else []
-        for p in files:
-            report_model(p.stem, tasks, labels)
-        if not files:
+        results = [r for r in (report_model(p.stem, tasks, labels) for p in files) if r]
+        if results:
+            report_summary(results)
+        else:
             print("\n模型：还没跑")
     else:
         print("用法：python -m examples.c_review.c3_eval rules | single | multi | agent | report")
