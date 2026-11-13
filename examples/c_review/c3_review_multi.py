@@ -40,8 +40,14 @@ def looker_prompt(p) -> str:
             "只描述看到的，不要判断危不危险。")
 
 
-def reader_prompt(fact_text: str) -> str:
-    """读数员：没有照片，只看测量值和规则的理由，判断规则的推论站不站得住。"""
+def reader_prompt(fact_text: str, picked: bool = True) -> str:
+    """读数员：没有照片，只看测量值和规则的理由，判断规则的推论站不站得住。随机抽查的帧没有规则的理由，就只说测量值。"""
+    if not picked:
+        return f"""你是读数员，看不到照片，只看下面这些测量值（可信）。这一刻是随机抽查的，不是规则挑出来的。
+
+{fact_text}
+
+用 2–3 句中文回答：我在不在动；有没有明显减速（比 −1 m/s² 猛）或急刹（比 −3 m/s² 猛）；单看这些数，这一刻像不像发生了需要我反应的事。"""
     return f"""你是读数员，看不到照片，只看下面这些数。车速、加速度、对象的位置是测量值，可信；TTC 是规则估出来的，
 它假设“我在追它”：它在我前面、和我同方向走、我比它快。
 
@@ -50,17 +56,19 @@ def reader_prompt(fact_text: str) -> str:
 用 2–3 句中文回答：规则挑中这一刻的理由站不站得住？先写结论“成立 / 不成立 / 说不准”，再说为什么（比如 TTC 的假设在这些数下成不成立、急刹是不是真的）。"""
 
 
-def judge_prompt(looker: str, reader: str) -> str:
+def judge_prompt(looker: str, reader: str, picked: bool = True) -> str:
     """裁判：照片 + 两份报告 + 两把尺子，填答题卡。"""
+    head = ("你是裁判，在审一段自动驾驶路采数据里被规则挑出来的一刻。规则会挑错。" if picked
+            else "你是裁判，在审一段自动驾驶路采数据里随机抽查的一刻（不是规则挑的）。")
     verdicts = "\n".join(f"- {k}：{v}" for k, v in VERDICTS.items())
     causes = "\n".join(f"- {k}：{v}" for k, v in CAUSES.items())
-    return f"""你是裁判，在审一段自动驾驶路采数据里被规则挑出来的一刻。规则会挑错。
+    return f"""{head}
 下面有两份报告，还有那一刻的前视照片。两份报告说法冲突时，看照片核对。
 
 看图员（看了照片，没看规则的数）：
 {looker}
 
-读数员（看了测量值和规则的理由，没看照片）：
+读数员（看了测量值，没看照片）：
 {reader}
 
 请用两把尺子判断，只能从下面的格子里选：

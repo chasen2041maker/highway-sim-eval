@@ -1,0 +1,265 @@
+{
+ "by": "Claude 预标注（2026-11-13），规范：平稳跟车、防御性减速、停着等别人经过都算没事",
+ "labels": {
+  "scene-0061_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0061_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "接近斑马线、前面白车在转，轻减速 = 防御性减速"
+  },
+  "scene-0061_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0061_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "平稳跟着白车减速（规范：跟车减速算没事）"
+  },
+  "scene-0061_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0103_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0103_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0103_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0553_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0553_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "我停着，小巴从前面正常经过"
+  },
+  "scene-0553_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "我停着，行人在斑马线上走"
+  },
+  "scene-0553_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0553_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0655_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0655_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0655_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0655_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0757_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0757_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "我停着，货车从前面经过"
+  },
+  "scene-0757_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0757_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0796_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0796_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0796_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0796_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0796_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0916_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0916_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0916_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0916_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0916_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "停车场里转弯前减速"
+  },
+  "scene-1077_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1077_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1077_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1077_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1077_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1094_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1094_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1094_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1094_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1100_05": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1100_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1100_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-1100_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "我停着，摩托车从前面经过"
+  },
+  "scene-1100_37": {
+   "verdict": "没事",
+   "cause": null,
+   "note": ""
+  },
+  "scene-0103_13": {
+   "verdict": "值得看",
+   "cause": "横穿",
+   "note": "左边黑色 SUV 横穿，我开始刹（−2.49），下一帧就是规则挑中的急刹",
+   "review": true
+  },
+  "scene-0103_14": {
+   "verdict": "值得看",
+   "cause": "横穿",
+   "note": "左边黑色 SUV 横穿，我刹到 −3.24（2d 你判过）"
+  },
+  "scene-0103_21": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "左边银车斜着；我很慢、在加速，没为它减速。拿不准",
+   "review": true
+  },
+  "scene-0655_29": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "右边铰接公交车车头朝我，方向没看懂；我在加速。拿不准",
+   "review": true
+  },
+  "scene-0757_13": {
+   "verdict": "没事",
+   "cause": null,
+   "note": "到路口减速，银车和公交横向经过；算防御性减速还是为它们减速，拿不准",
+   "review": true
+  },
+  "scene-1094_13": {
+   "verdict": "值得看",
+   "cause": "行人或骑车人",
+   "note": "夜里一个打伞的人从我前面横穿，我很慢（2.5）但只减了 −0.24，拿不准",
+   "review": true
+  }
+ }
+}

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C3 标注</title>
+<style>
+:root { --bg:#f3f5f7; --card:#fff; --ink:#1b222a; --muted:#5b6672; --line:#d5dce3; --pick:#1e66d6;
+        --danger:#c92a2a; --look:#e8590c; --none:#2f9e44; --unk:#868e96; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 "Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif; }
+.wrap { max-width:1180px; margin:0 auto; padding:14px 16px 40px; display:grid; gap:12px; }
+.bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.bar .grow { flex:1; }
+button { font:inherit; padding:6px 12px; border:1px solid var(--line); border-radius:6px; background:var(--card); cursor:pointer; color:var(--ink); }
+button:hover { border-color:var(--muted); }
+button:disabled { opacity:.35; cursor:not-allowed; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+.main { display:grid; grid-template-columns:minmax(0,800px) minmax(0,1fr); gap:12px; }
+@media (max-width:1000px){ .main { grid-template-columns:minmax(0,1fr); } }
+img { display:block; width:100%; height:auto; border-radius:6px; }
+.thumbs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.cap { font-size:13px; color:var(--muted); margin:2px 0 0; }
+.facts { font-size:16px; margin:8px 0 0; }
+.facts b { font-variant-numeric:tabular-nums; }
+h2 { font-size:15px; margin:0 0 6px; }
+.choices { display:grid; gap:6px; margin-bottom:12px; }
+.choice { text-align:left; display:grid; grid-template-columns:28px 1fr; gap:6px; align-items:start; }
+.choice .k { font-weight:700; color:var(--muted); }
+.choice .n { font-weight:700; }
+.choice .h { grid-column:2; font-size:12.5px; color:var(--muted); line-height:1.4; }
+.choice.on { border-color:var(--pick); box-shadow:0 0 0 2px var(--pick) inset; }
+textarea { width:100%; min-height:48px; font:inherit; padding:6px; border:1px solid var(--line); border-radius:6px; }
+.strip { display:flex; flex-wrap:wrap; gap:3px; }
+.dot { width:16px; height:16px; border-radius:3px; border:1px solid var(--line); background:#e9ecef; cursor:pointer; padding:0; }
+.dot.cur { outline:2px solid var(--ink); }
+.dot.v-危险 { background:var(--danger); } .dot.v-值得看 { background:var(--look); }
+.dot.v-没事 { background:var(--none); } .dot.v-看不出 { background:var(--unk); }
+.tip { font-size:13px; color:var(--muted); }
+.saved { color:var(--none); font-weight:700; }
+.pre { margin:0 0 10px; padding:8px 10px; border-radius:6px; background:#fff4e6; font-size:13.5px; }
+.pre.ok { background:#ebfbee; }
+.dot.rv { box-shadow:0 0 0 2px var(--look) inset; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <b>C3 标注</b><span id="prog"></span><span class="grow"></span>
+    <button id="prev">← 上一条</button><button id="next">下一条 →</button><button id="todo">跳到没标的</button><button id="rev">跳到要复核的</button>
+    <button id="export">导出答案</button><label><button id="importBtn" type="button">导入答案</button><input id="import" type="file" accept=".json" hidden></label>
+  </div>
+  <div class="strip" id="strip"></div>
+  <div class="main">
+    <div class="card">
+      <img id="img" alt="前视照片">
+      <p class="facts" id="facts"></p>
+      <div class="thumbs">
+        <div><img id="pimg" alt="前 0.5 秒"><p class="cap">前 0.5 秒</p></div>
+        <div><img id="nimg" alt="后 0.5 秒"><p class="cap">后 0.5 秒</p></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>第 1 题：这一刻值不值得看？（按 1–4）</h2>
+      <div class="choices" id="vs"></div>
+      <h2>第 2 题：原因（只有“危险”“值得看”才选，按 A–G）</h2>
+      <div class="choices" id="cs"></div>
+      <p class="pre" id="pre"></p>
+      <h2>备注（可不填）</h2>
+      <textarea id="note" placeholder="比如：拿不准、为什么这么判"></textarea>
+      <p class="tip">选“没事”“看不出”会自动跳下一条；选“危险”“值得看”要再选原因。进度存在这个浏览器里，标完点“导出答案”。<span id="saved"></span></p>
+    </div>
+  </div>
+</div>
+<script>
+const D = __DATA__;
+const KEY = "c3_labels_v1";
+let labels = {};
+try { labels = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { labels = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(labels)); } catch (e) {} };
+let i = 0;
+const PRE = D.pre || {};
+const mine = id => !!(labels[id] && labels[id].verdict);              // 人点过的
+const cur = id => mine(id) ? labels[id] : (PRE[id] || {});           // 人点过用人的，否则用预标注
+const needsReview = id => !mine(id) && PRE[id] && PRE[id].review;
+const $ = id => document.getElementById(id);
+const fmt = (x, d, u) => x === null ? "不知道" : x.toFixed(d) + " " + u;
+
+function buildChoices() {
+  $("vs").innerHTML = D.verdicts.map((v, j) =>
+    `<button class="choice" data-v="${v}"><span class="k">${j + 1}</span><span class="n">${v}</span><span class="h">${D.verdict_help[v]}</span></button>`).join("");
+  $("cs").innerHTML = D.causes.map((c, j) =>
+    `<button class="choice" data-c="${c}"><span class="k">${"ABCDEFG"[j]}</span><span class="n">${c}</span><span class="h">${D.cause_help[c]}</span></button>`).join("");
+  $("vs").querySelectorAll("button").forEach(b => b.onclick = () => pickVerdict(b.dataset.v));
+  $("cs").querySelectorAll("button").forEach(b => b.onclick = () => pickCause(b.dataset.c));
+}
+function needsCause(v) { return v === "危险" || v === "值得看"; }
+function done(id) { const l = cur(id); return l && l.verdict && (!needsCause(l.verdict) || l.cause); }
+function pickVerdict(v) {
+  const id = D.tasks[i].id;
+  labels[id] = Object.assign({}, labels[id], { verdict: v, cause: needsCause(v) ? (cur(id).cause || null) : null });
+  save(); render();
+  if (!needsCause(v)) setTimeout(() => go(1), 150);
+}
+function pickCause(c) {
+  const id = D.tasks[i].id;
+  if (!mine(id)) labels[id] = Object.assign({}, cur(id), labels[id] || {});   // 在预标注上改原因，也算人确认
+  const l = labels[id];
+  if (!l || !needsCause(l.verdict)) return;
+  l.cause = c; save(); render(); setTimeout(() => go(1), 150);
+}
+function go(d) { i = Math.max(0, Math.min(D.tasks.length - 1, i + d)); render(); }
+function render() {
+  const t = D.tasks[i], l = cur(t.id);
+  const p = PRE[t.id];
+  $("pre").className = "pre" + (mine(t.id) ? " ok" : "");
+  $("pre").innerHTML = mine(t.id) ? "✓ 你已确认（下面是你的答案）" + (p ? `　预标注是：${p.verdict}${p.cause ? " / " + p.cause : ""}` : "")
+    : p ? `Claude 预标注：<b>${p.verdict}${p.cause ? " / " + p.cause : ""}</b>${p.review ? "　<b>（拿不准，请你看一下）</b>" : ""}<br>${p.note || ""}<br>同意就按一下同样的选项确认；不同意就选你的。` : "";
+  $("img").src = "data:image/jpeg;base64," + t.img;
+  $("pimg").src = t.prev ? "data:image/jpeg;base64," + t.prev : "";
+  $("nimg").src = t.next ? "data:image/jpeg;base64," + t.next : "";
+  $("facts").innerHTML = `${t.scene} · 第 ${t.frame} 帧 · <b>${t.t.toFixed(2)}</b> 秒 · 车速 <b>${fmt(t.v, 1, "m/s")}</b> · 加速度 <b>${fmt(t.a, 2, "m/s²")}</b>（负数 = 在减速）`
+    + (t.boxed ? "<br>照片上的橙色框，是规则挑中的那个东西。" : "");
+  $("vs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === l.verdict));
+  $("cs").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.c === l.cause); b.disabled = !needsCause(l.verdict); });
+  $("note").value = (mine(t.id) ? labels[t.id].note : "") || "";
+  const n = D.tasks.filter(x => mine(x.id)).length, r = D.tasks.filter(x => needsReview(x.id)).length;
+  $("prog").textContent = `　第 ${i + 1} / ${D.tasks.length} 条　你确认过 ${n} 条　还要复核 ${r} 条`;
+  $("strip").innerHTML = D.tasks.map((x, j) => `<button class="dot ${mine(x.id) && done(x.id) ? "v-" + labels[x.id].verdict : ""} ${needsReview(x.id) ? "rv" : ""} ${j === i ? "cur" : ""}" title="${x.id}" data-j="${j}"></button>`).join("");
+  $("strip").querySelectorAll(".dot").forEach(b => b.onclick = () => { i = +b.dataset.j; render(); });
+  $("prev").disabled = i === 0; $("next").disabled = i === D.tasks.length - 1;
+}
+$("note").oninput = e => { const id = D.tasks[i].id; labels[id] = Object.assign({}, labels[id], { note: e.target.value }); save(); };
+$("rev").onclick = () => { const n = D.tasks.length; for (let s = 1; s <= n; s++) { const j = (i + s) % n; if (needsReview(D.tasks[j].id)) { i = j; render(); return; } } };
+$("prev").onclick = () => go(-1); $("next").onclick = () => go(1);
+$("todo").onclick = () => { const j = D.tasks.findIndex(x => !done(x.id)); if (j >= 0) { i = j; render(); } };
+$("export").onclick = () => {
+  const out = {};
+  D.tasks.forEach(x => {
+    if (mine(x.id)) out[x.id] = Object.assign({}, labels[x.id], { by: "人" });
+    else if (PRE[x.id]) out[x.id] = { verdict: PRE[x.id].verdict, cause: PRE[x.id].cause, note: PRE[x.id].note || "", by: "预标注" };
+  });
+  const blob = new Blob([JSON.stringify({ version: 2, exported: new Date().toISOString(), pre_by: D.pre_by, labels: out }, null, 1)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "c3_labels.json"; a.click();
+  $("saved").innerHTML = '　<span class="saved">已导出 c3_labels.json（在“下载”文件夹）</span>';
+};
+$("importBtn").onclick = () => $("import").click();
+$("import").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(s => { try { labels = Object.assign(labels, JSON.parse(s).labels || {}); save(); render(); } catch (err) { alert("文件格式不对"); } });
+};
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "TEXTAREA") return;
+  if (e.key >= "1" && e.key <= "4") pickVerdict(D.verdicts[+e.key - 1]);
+  const c = "abcdefg".indexOf(e.key.toLowerCase()); if (c >= 0 && e.key.length === 1) pickCause(D.causes[c]);
+  if (e.key === "ArrowRight") go(1); if (e.key === "ArrowLeft") go(-1);
+});
+buildChoices();
+{ const j = D.tasks.findIndex(x => needsReview(x.id)); i = j >= 0 ? j : 0; }
+render();
+</script>
+</body>
+</html>
