@@ -125,6 +125,11 @@ def parse_answer(text: str) -> dict:
         d = json.loads(m.group(0))
     except json.JSONDecodeError:
         return {"valid": False, "why": "JSON 格式不对"}
+    return check_answer(d)
+
+
+def check_answer(d: dict) -> dict:
+    """校验一张答题卡（3c 从文字里取出的 JSON，或 4b 智能体交卷工具的参数）。"""
     v, c = d.get("verdict"), d.get("cause")
     if c in ("null", "", "无"):
         c = None

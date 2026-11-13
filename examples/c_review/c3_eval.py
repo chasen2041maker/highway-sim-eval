@@ -4,15 +4,19 @@
           规则挑中的里有几个答案真是“危险 / 值得看”（精确）。不调模型。
   single  一个模型（3c）把 51 条都复核一遍。
   multi   分开做（3d：看图员 / 读数员 / 裁判）把 51 条都复核一遍。
+  agent   工具调用版智能体（4b：自己决定看不看前后帧、查不查车速和附近的车和人，再交卷）把 51 条都复核一遍。
   report  把跑过的模型都对一遍答案：准确率、混淆矩阵、“值得看”的精确和召回、原因对不对、花了多少 token。
 
 模型的回答边跑边存进 outputs/c3/eval/<single|multi>.jsonl；断网中途停了，再跑一次会跳过答过的（B2 的断点续跑）。
 mini 只有 51 条、正样本 3 条，所有比例都带 95% 置信区间（B4），区间很宽是正常的：这一步是把流程跑通。
+答案卷改过 1 条（11-13）：scene-1094_13 由“值得看 / 行人或骑车人”改成“没事”——工具调用版和答案卷不一致，复核时看了
+俯视图和量出来的数据（打伞的行人离我左转的路 7.3 米），原值存在 labels.json 那一条的 before 里。同一轮也复核了 0103_13，数据支持原答案，没改。
 
 运行（项目根目录，conda activate py310；先跑过 c3_label_tasks，答案卷放在 outputs/c3/label/labels.json）：
     python -m examples.c_review.c3_eval rules
     python -m examples.c_review.c3_eval single
     python -m examples.c_review.c3_eval multi
+    python -m examples.c_review.c3_eval agent
     python -m examples.c_review.c3_eval report
 换了提示词 / 规范再跑一轮，加一个轮次名，结果另存、不盖掉上一轮：
     python -m examples.c_review.c3_eval single v2          → outputs/c3/eval/single_v2.jsonl
@@ -25,6 +29,7 @@ import sys
 from pathlib import Path
 
 from evaluation.confidence import wilson_interval
+from examples.c_review.c3_agent import review_agent
 from examples.c_review.c3_pick import scene_frames
 from examples.c_review.c3_review import build_prompt, facts, parse_answer, picked, review_photo
 from examples.c_review.c3_review_multi import ask_text, judge_prompt, looker_prompt, reader_prompt
@@ -96,8 +101,10 @@ def tokens(*usages) -> int:
 
 
 def review_one(mode, model, T, frames, k) -> dict:
+    """复核一帧，返回要存的一行（答案、依据、token；分开做还存两份报告；智能体还存几轮、查了哪些工具）。"""
     mode = mode.partition("_")[0]
-    """复核一帧，返回要存的一行（答案、依据、token；分开做还存两份报告）。"""
+    if mode == "agent":
+        return review_agent(model, T, frames, k, log=lambda *a: None)
     p = picked(frames, k, True, True)
     fact_text = facts(frames, k, True, True)
     photo = review_photo(T, frames, k, True, True)
@@ -144,7 +151,8 @@ def run(mode: str):
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
             f.flush()                                      # 边答边存
             shown = f"{row['verdict']}{' / ' + row['cause'] if row['cause'] else ''}" if row["valid"] else f"无效（{row['why']}）"
-            print(f"  [{n}/{len(todo)}] {t['id']}：{shown}（{row['tokens']} token）")
+            looked = f"，查了 {'、'.join(row['tools']) or '没查'}" if "tools" in row else ""
+            print(f"  [{n}/{len(todo)}] {t['id']}：{shown}（{row['tokens']} token{looked}）")
 
 
 # ---------- 对答案 ----------
@@ -183,7 +191,7 @@ def report_model(mode, tasks, labels):
     rows = [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
     s = model_scores(tasks, labels, rows)
     base, _, tag = mode.partition("_")
-    name = {"single": "一个模型（3c）", "multi": "分开做（3d）"}[base] + (f"·{tag}" if tag else "·第一轮")
+    name = {"single": "一个模型（3c）", "multi": "分开做（3d）", "agent": "工具调用智能体（4）"}[base] + (f"·{tag}" if tag else "·第一轮")
     print(f"\n{name}：答了 {s['n']} / {len(tasks)} 条，无效 {s['invalid']} 条，一共 {s['tokens']:,} token（每条约 {s['tokens'] // max(s['n'], 1):,}）")
     print(f"  第 1 题全对（4 选 1）：{ci(s['right'], s['n'])}")
     print(f"  值得看 / 危险 —— 精确（它说值得看的里真值得看）：{ci(s['tp'], s['tp'] + s['fp'])}")
@@ -194,6 +202,8 @@ def report_model(mode, tasks, labels):
     print("    " + "".join(f"{c:>6}" for c in [""] + cols))
     for h in VERDICTS:
         print("    " + f"{h:>6}" + "".join(f"{s['conf'][h][c]:>7}" for c in cols))
+    if base == "agent":
+        report_tools(rows)
     if s["wrong"]:
         print("  答错的：")
         for tid, h, r in s["wrong"]:
@@ -201,12 +211,31 @@ def report_model(mode, tasks, labels):
             print(f"    {tid}：答案 {h['verdict']}{' / ' + h['cause'] if h['cause'] else ''}，模型 {m}。依据：{(r['evidence'] or r['raw'])[:80]}")
 
 
+def tool_stats(rows) -> dict:
+    """智能体查了什么：每个工具被调用几次、几条一个工具都没查、平均几轮、怎么停的。"""
+    counts, stopped = {}, {}
+    for r in rows:
+        for name in r.get("tools", []):
+            counts[name] = counts.get(name, 0) + 1
+        stopped[r.get("stopped")] = stopped.get(r.get("stopped"), 0) + 1
+    return {"counts": counts, "no_tool": sum(1 for r in rows if not r.get("tools")), "stopped": stopped,
+            "steps": sum(r.get("steps", 0) for r in rows) / max(len(rows), 1),
+            "cache": sum(r.get("cache_hit_tokens", 0) for r in rows)}
+
+
+def report_tools(rows):
+    s = tool_stats(rows)
+    calls = "、".join(f"{k} {v} 次" for k, v in sorted(s["counts"].items(), key=lambda x: -x[1])) or "一次都没查"
+    print(f"  查了什么：{calls}；{s['no_tool']} 条什么都没查；平均 {s['steps']:.1f} 轮；"
+          f"停下：{'、'.join(f'{k} {v}' for k, v in s['stopped'].items())}；缓存命中 {s['cache']:,} token")
+
+
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "report"
     tasks, labels = load_answer_key()
     if mode == "rules":
         report_rules(tasks, labels)
-    elif mode in ("single", "multi"):
+    elif mode in ("single", "multi", "agent"):
         tag = sys.argv[2] if len(sys.argv) > 2 else ""
         run(mode + (f"_{tag}" if tag else ""))
     elif mode == "report":
@@ -217,7 +246,7 @@ def main():
         if not files:
             print("\n模型：还没跑")
     else:
-        print("用法：python -m examples.c_review.c3_eval rules | single | multi | report")
+        print("用法：python -m examples.c_review.c3_eval rules | single | multi | agent | report")
 
 
 if __name__ == "__main__":
